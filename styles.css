@@ -1,0 +1,37 @@
+.my-addtable-icon, .my-addtable-icon:hover,
+.my-exportdatabase-icon, .my-exportdatabase-icon:hover {
+    color: #6e3778;
+}
+
+.my-queryanimal-modal {
+    max-width: 450px;
+}
+
+.my-queryanimal-modal select {
+    width: 300px;
+}
+
+/* Spinner Styles */
+.loading-spinner {
+    border: 8px solid #f3f3f3;
+    border-top: 8px solid #3498db;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+  }
+  
+  @keyframes spin {
+    0% {
+      transform: translate(-50%, -50%) rotate(0deg);
+    }
+    100% {
+      transform: translate(-50%, -50%) rotate(360deg);
+    }
+  }
+  

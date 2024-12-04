@@ -1,0 +1,11 @@
+{
+	"id": "labbook-explog-fmi",
+	"name": "LabBook ExpLog Plugin",
+	"version": "0.0.1",
+	"minAppVersion": "0.15.0",
+	"description": "Experimental data collection and export to ExpLog database.",
+	"author": "Friedrich Miescher Institute",
+	"authorUrl": "https://www.fmi.ch",
+	"fundingUrl": "",
+	"isDesktopOnly": true
+}
