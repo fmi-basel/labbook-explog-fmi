@@ -1,8 +1,9 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
 import * as yaml from 'js-yaml';
 import moment from "moment"; // A namespace-style import cannot be called or constructed, and will cause a failure at runtime.
-import { queryPIs, queryAnimals, DBConfig } from "./db-queries";
+import { queryPIs, queryAnimals, DBConfig, existsAnimal } from "./db-queries";
 import { ExportData } from "./export-data";
+import { ExportWizardModal } from "./export-wizard";
 
 interface LabBookExpLogSettings {
 	dbUser: string;
@@ -27,8 +28,8 @@ const DEFAULT_SETTINGS: LabBookExpLogSettings = {
 }
 
 export default class LabBookExpLogPlugin extends Plugin {
-	settings: LabBookExpLogSettings;
-	dbConfig: DBConfig;
+	_settings: LabBookExpLogSettings;
+	_dbConfig: DBConfig;
 
 	async onload() {
 		await this.loadSettings();
@@ -39,11 +40,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 		  }).addClass("my-addtable-icon");
 
 		this.addRibbonIcon("database", "Export ExpLog Database", async () => {
-			const extractData = await this.extractExpLogData();
-			
-			//TODO
-			console.log(extractData);
-
+			await this.exportExpLogData();
 		  }).addClass("my-exportdatabase-icon");
 
 		this.addSettingTab(new LabBookSettingTab(this.app, this));
@@ -54,26 +51,26 @@ export default class LabBookExpLogPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this._settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 	}
 
 	async saveSettings() {
-		await this.saveData(this.settings);
+		await this.saveData(this._settings);
 		await this.updateDBConfig();
 	}
 
 	private async updateDBConfig() {
-		this.dbConfig = {
-		  user: this.settings.dbUser || "",
-		  password: this.settings.dbPassword || "",
-		  server: this.settings.dbServer || "",
-		  database: this.settings.dbName || "",
-		  encrypt: this.settings.dbEncrypt ?? true,
-		  trustServerCertificate: this.settings.dbTrustServerCertificate ?? true,
+		this._dbConfig = {
+		  user: this._settings.dbUser || "",
+		  password: this._settings.dbPassword || "",
+		  server: this._settings.dbServer || "",
+		  database: this._settings.dbName || "",
+		  encrypt: this._settings.dbEncrypt ?? true,
+		  trustServerCertificate: this._settings.dbTrustServerCertificate ?? true,
 		};
 	
 		// Optional: Validate the configuration
-		if (!this.dbConfig.user || !this.dbConfig.password || !this.dbConfig.server) {
+		if (!this._dbConfig.user || !this._dbConfig.password || !this._dbConfig.server) {
 			new Notice("DB Config is incomplete. Ensure all required settings are provided.");
 		}
 	}
@@ -88,7 +85,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 		// Check/get AnimalID from metadata
 		const metadata = this.app.metadataCache.getFileCache(file);
 		if (!metadata?.frontmatter?.AnimalID) {
-			const modal = new QueryAnimalModal(this.app, this.dbConfig, this);
+			const modal = new QueryAnimalModal(this.app, this._dbConfig, this);
 			const animalID = await modal.openWithPromise();
 			if (animalID) {
 				await this.updateYamlMetadata(file, { AnimalID: animalID });
@@ -112,9 +109,103 @@ export default class LabBookExpLogPlugin extends Plugin {
 		// Create and insert the table
 		const newTable = this.generateTableWithHeaders(headers);
 		await this.insertTableIntoFile(file, fileContent, newTable);
-	  }
+	}
 
-	  async updateYamlMetadata(file: TFile, newMetadata: Record<string, any>): Promise<void> {
+	async exportExpLogData() {
+		try {
+			const file = this.app.workspace.getActiveFile();
+			if (!file) {
+				new Notice("No active file to export data.");
+				return;
+			}
+
+			// Check/get AnimalID from metadata
+			let animalID: string | null = null;
+			const metadata = this.app.metadataCache.getFileCache(file);
+			if (!metadata?.frontmatter?.AnimalID) {
+				const modal = new QueryAnimalModal(this.app, this._dbConfig, this);
+				animalID = await modal.openWithPromise();
+				if (animalID) {
+					await this.updateYamlMetadata(file, { AnimalID: animalID });
+				} else {
+					new Notice("No animal selected.");
+					return;
+				}
+			}
+			else {
+				animalID = metadata.frontmatter.AnimalID as string;
+			}
+
+			if (!animalID) {
+				new Notice("No AnimalID found in properties.");
+				return;
+			}
+
+			const animalExists = await existsAnimal(this._dbConfig, animalID);
+			if (!animalExists) {
+				new Notice("Animal not found in database.");
+				return;
+			}
+
+			// Some initial validations
+			const exportData = await this.extractExpLogData();
+			if (!exportData || exportData.length === 0) {
+				new Notice("No data to be exported.");
+				return;
+			}
+			
+			const hasInvalidData = exportData.some(p => p.isInvalid());
+			if (hasInvalidData) {
+				const invalidRows: string[] = [];
+				for (let i = 0; i < exportData.length; i++) {
+					const data = exportData[i];
+					if (data.isInvalid()) {
+						invalidRows.push(data.position.toString());
+					}
+				}
+				const invalidRowsOutput = invalidRows.join(", ");
+				new Notice(`There is invalid data!\n\nPlease make sure to provide correct data for Date, Time, StackID, ExpID and SiteID. Empty rows are skipped by default.\n\nRows: ${invalidRowsOutput}`);
+				return;
+			}
+
+			const hasIncompleteData = exportData.some(p => !p.isComplete());
+			if (hasIncompleteData) {
+				const incompleteRows: string[] = [];
+				for (let i = 0; i < exportData.length; i++) {
+					const data = exportData[i];
+					if (!data.isComplete()) {
+						incompleteRows.push(data.position.toString());
+					}
+				}
+				const incompleteRowsOutput = incompleteRows.join(", ");
+				new Notice(`There is incomplete data!\n\nPlease make sure to provide Date, Time, StackID, ExpID and SiteID. Empty rows are skipped by default.\n\nRows: ${incompleteRowsOutput}`);
+				return;
+			}
+
+			const actualExportData = exportData.filter(p => !p.isEmpty());
+			if (!actualExportData || actualExportData.length === 0) {
+				new Notice("No data to be exported.");
+				return;
+			}
+
+			console.log(`Actual ExportData: ${actualExportData}`);
+
+			const exportModal = new ExportWizardModal(this.app, this._dbConfig, animalID, actualExportData);
+			const errorResult = await exportModal.openWithPromise();
+			if (!errorResult) {
+				new Notice(`Data for '${animalID}' has been exported successfully.`);
+			}
+			else {
+				new Notice(`Sorry, data for '${animalID}' has not been exported.`);
+			}
+		}
+		catch (err) {
+			console.error("Failed to export:", err);
+			new Notice(err.message); 
+		}
+	}
+
+	async updateYamlMetadata(file: TFile, newMetadata: Record<string, any>): Promise<void> {
 		const content = await this.app.vault.read(file);
 	  
 		// Extract existing YAML front matter
@@ -133,38 +224,38 @@ export default class LabBookExpLogPlugin extends Plugin {
 		  : `${updatedYaml}\n\n${content}`;
 	  
 		await this.app.vault.modify(file, updatedContent);
-	  }
+	}
 
-	  async parseYaml(content: string): Promise<Record<string, any>> {
+	async parseYaml(content: string): Promise<Record<string, any>> {
 		try {
 		  return yaml.load(content) as Record<string, any>;
-		} catch (e) {
-		  console.error("Failed to parse YAML:", e);
+		} catch (err) {
+		  console.error("Failed to parse YAML:", err);
 		  return {};
 		}
-	  }
+	}
 	  
-	  async stringifyYaml(data: Record<string, any>): Promise<string> {
+	async stringifyYaml(data: Record<string, any>): Promise<string> {
 		try {
 		  return yaml.dump(data);
-		} catch (e) {
-		  console.error("Failed to stringify YAML:", e);
+		} catch (err) {
+		  console.error("Failed to stringify YAML:", err);
 		  return "";
 		}
-	  }
+	}
 	
-	  matchingTableExist(content: string, headers: string[]): boolean {
+	matchingTableExist(content: string, headers: string[]): boolean {
 		const headerRegex = new RegExp(
 		  `\\|\\s*${headers.join("\\s*\\|\\s*")}\\s*\\|`
 		);
 		return headerRegex.test(content);
-	  }
+	}
 	
-	  getExpLogTableHeaders(): string[] {
+	getExpLogTableHeaders(): string[] {
 		return ["Date", "Time", "StackID", "ExpID", "SiteID", "Comment"];
-	  }
+	}
 	
-	  generateTableWithHeaders(headers: string[]): string {
+	generateTableWithHeaders(headers: string[]): string {
 		const headerRow = `| ${headers.join(" | ")} |`;
 		const separatorRow = `| ${headers.map(() => "---").join(" | ")} |`;
 	  
@@ -172,14 +263,14 @@ export default class LabBookExpLogPlugin extends Plugin {
 		const blankRow = `| ${headers.map(() => " ").join(" | ")} |`;
 	  
 		return `${headerRow}\n${separatorRow}\n${blankRow}`;
-	  }		  
+	}		  
 	
-	  async insertTableIntoFile(file: TFile, content: string, table: string) {
+	async insertTableIntoFile(file: TFile, content: string, table: string) {
 		const updatedContent = `${content}\n\n${table}`;
 		await this.app.vault.modify(file, updatedContent);
-	  }
+	}
 
-	  async extractExpLogData(): Promise<ExportData[]> {
+	async extractExpLogData(): Promise<ExportData[]> {
 		const file = this.app.workspace.getActiveFile();
 		if (!file) {
 		  new Notice("No active file.");
@@ -197,7 +288,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 
 			const tableData = await this.extractTableData(fileContent, headers);
 			if (tableData && tableData.length > 0) {
-				const dateFormat = this.settings.inputDateFormat + " " + this.settings.inputTimeFormat;
+				const dateFormat = this._settings.inputDateFormat + " " + this._settings.inputTimeFormat;
 
 				let exportDataArray: ExportData[] = [];
 				let position = 1;
@@ -257,9 +348,9 @@ export default class LabBookExpLogPlugin extends Plugin {
 		}
 
 		return[];
-	  }
+	}
 	  
-	  async extractTableData(content: string, headers: string[]): Promise<{ [key: string]: string }[]> {
+	async extractTableData(content: string, headers: string[]): Promise<{ [key: string]: string }[]> {
 		// Create a regex to match the table headers
 		const headerRegex = new RegExp(
 		  `^\\|\\s*${headers.join("\\s*\\|\\s*")}\\s*(\\|.*)?\\|\\s*$`,
@@ -313,38 +404,38 @@ export default class LabBookExpLogPlugin extends Plugin {
 		}
 	  
 		return dataRows;
-	  }	  
+	}
 
-	  showSpinner(containerEl: HTMLElement): HTMLElement {
+	showSpinner(containerEl: HTMLElement): HTMLElement {
 		const spinner = containerEl.createDiv({ cls: "loading-spinner" });
 		return spinner;
-	  }
-	  
-	  hideSpinner(spinner: HTMLElement) {
+	}
+	
+	hideSpinner(spinner: HTMLElement) {
 		spinner.remove();
-	  }
+	}
 }
 
 class QueryAnimalModal extends Modal {
-	plugin: LabBookExpLogPlugin;
-	dbConfig: DBConfig
-	private resolvePromise: (value: string | null) => void; // Function to resolve the Promise
-  	private result: string | null = null; // To store the result
-	private animalDropdown: any; // Used for referencing by the other dropdown (PI)
+	_plugin: LabBookExpLogPlugin;
+	_dbConfig: DBConfig
+	private _resolvePromise: (value: string | null) => void; // Function to resolve the Promise
+  	private _result: string | null = null; // To store the result
+	private _animalDropdown: any; // Used for referencing by the other dropdown (PI)
 	
 	constructor(app: App, dbConfig: DBConfig, plugin: LabBookExpLogPlugin) {
 	  super(app);
-	  this.dbConfig = dbConfig;
-	  this.plugin = plugin;
+	  this._dbConfig = dbConfig;
+	  this._plugin = plugin;
 	}
 
 	// Method to open the modal and return a Promise
 	openWithPromise(): Promise<string | null> {
 		return new Promise((resolve) => {
-		  this.resolvePromise = resolve; // Store the resolve function
-		  this.open();
+			this._resolvePromise = resolve; // Store the resolve function
+			this.open();
 		});
-	  }
+	}
 
 	onOpen() {
 	  const { contentEl } = this;
@@ -363,7 +454,7 @@ class QueryAnimalModal extends Modal {
 			
 			try {
 				// Fetch the list of PIs
-				const piList = await queryPIs(this.dbConfig);
+				const piList = await queryPIs(this._dbConfig);
 
 				// Populate the dropdown with PIs
 				if (piList) {
@@ -382,19 +473,19 @@ class QueryAnimalModal extends Modal {
 			dropdown.onChange(async (value) => {
 				if (value) {
 					console.log(`Selected PI: ${value}`);
-					const animalIDList = await queryAnimals(this.dbConfig, value);
+					const animalIDList = await queryAnimals(this._dbConfig, value);
 
 					// Reset and populate the second dropdown
-					this.animalDropdown.selectEl.innerHTML = ""; // Clear previous options
-					this.animalDropdown.addOption("", "Please select");
+					this._animalDropdown.selectEl.innerHTML = ""; // Clear previous options
+					this._animalDropdown.addOption("", "Please select");
 					animalIDList.forEach((animalID) => {
-						this.animalDropdown.addOption(animalID, animalID);
+						this._animalDropdown.addOption(animalID, animalID);
 					});
 				} else {
 					console.log("No PI selected.");
 					// Reset the second dropdown
-					this.animalDropdown.selectEl.innerHTML = ""; // Clear all options
-					this.animalDropdown.addOption("", "Please select");
+					this._animalDropdown.selectEl.innerHTML = ""; // Clear all options
+					this._animalDropdown.addOption("", "Please select");
 				}
 			});
 		});
@@ -403,16 +494,16 @@ class QueryAnimalModal extends Modal {
 		.setName("Animal")
 		.addDropdown(async (dropdown) => {
 			dropdown.addOption("", "Please select");
-			this.animalDropdown = dropdown; // Assign for easy reference
+			this._animalDropdown = dropdown; // Assign for easy reference
 
 			// Handle dropdown value change
 			dropdown.onChange(async (value) => {
 				if (value) {
 					console.log(`Selected Animal: ${value}`);
-					this.result = value;
+					this._result = value;
 				} else {
 					console.log("No Animal selected.");
-					this.result = null;
+					this._result = null;
 				}
 			});
 		});
@@ -424,7 +515,7 @@ class QueryAnimalModal extends Modal {
 			.setCta()
 			.onClick(async () => {
 				// Check if this.result` is set
-				if (!this.result) {
+				if (!this._result) {
 					new Notice("Please select an animal before proceeding, or cancel by closing this window.");
 					return; // Prevent closing the modal
 				}
@@ -436,18 +527,18 @@ class QueryAnimalModal extends Modal {
   
 	onClose() {
 	  const { contentEl } = this;
-	  contentEl.empty();
+	  contentEl.empty(); // Clean up modal
 
-	  this.resolvePromise(this.result); // Resolve the Promise with the result
+	  this._resolvePromise(this._result); // Resolve the Promise with the result
 	}
   }
 
 class LabBookSettingTab extends PluginSettingTab {
-	plugin: LabBookExpLogPlugin;
+	_plugin: LabBookExpLogPlugin;
 
 	constructor(app: App, plugin: LabBookExpLogPlugin) {
 		super(app, plugin);
-		this.plugin = plugin;
+		this._plugin = plugin;
 	}
 
 	display(): void {
@@ -461,30 +552,30 @@ class LabBookSettingTab extends PluginSettingTab {
 			.setName('Database Server')
 			.addText(text => text
 				.setPlaceholder('localhost')
-				.setValue(this.plugin.settings.dbServer)
+				.setValue(this._plugin._settings.dbServer)
 				.onChange(async (value) => {
-				this.plugin.settings.dbServer = value;
-				await this.plugin.saveSettings();
+				this._plugin._settings.dbServer = value;
+				await this._plugin.saveSettings();
 				}));
 
 		new Setting(containerEl)
 			.setName('Database Name')
 			.addText(text => text
 				.setPlaceholder('ExpLog')
-				.setValue(this.plugin.settings.dbName)
+				.setValue(this._plugin._settings.dbName)
 				.onChange(async (value) => {
-				this.plugin.settings.dbName = value;
-				await this.plugin.saveSettings();
+				this._plugin._settings.dbName = value;
+				await this._plugin.saveSettings();
 				}));
 
 		new Setting(containerEl)
 			.setName('Database User')
 			.addText(text => text
 				.setPlaceholder('dbuser')
-				.setValue(this.plugin.settings.dbUser)
+				.setValue(this._plugin._settings.dbUser)
 				.onChange(async (value) => {
-				this.plugin.settings.dbUser = value;
-				await this.plugin.saveSettings();
+				this._plugin._settings.dbUser = value;
+				await this._plugin.saveSettings();
 				}));
 
 		new Setting(containerEl)
@@ -492,10 +583,10 @@ class LabBookSettingTab extends PluginSettingTab {
 			.addText(text => {
 				text
 					.setPlaceholder('password')
-					.setValue(this.plugin.settings.dbPassword)
+					.setValue(this._plugin._settings.dbPassword)
 					.onChange(async (value) => {
-						this.plugin.settings.dbPassword = value;
-						await this.plugin.saveSettings();
+						this._plugin._settings.dbPassword = value;
+						await this._plugin.saveSettings();
 					});
 				
 				// Set the input type to 'password' to mask the input
@@ -505,19 +596,19 @@ class LabBookSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName('Encrypt')
 			.addToggle(text => text
-				.setValue(this.plugin.settings.dbEncrypt)
+				.setValue(this._plugin._settings.dbEncrypt)
 				.onChange(async (value) => {
-				this.plugin.settings.dbEncrypt = value;
-				await this.plugin.saveSettings();
+				this._plugin._settings.dbEncrypt = value;
+				await this._plugin.saveSettings();
 				}));
 
 		new Setting(containerEl)
 			.setName('Trust Server Certificate')
 			.addToggle(text => text
-				.setValue(this.plugin.settings.dbTrustServerCertificate)
+				.setValue(this._plugin._settings.dbTrustServerCertificate)
 				.onChange(async (value) => {
-				this.plugin.settings.dbTrustServerCertificate = value;
-				await this.plugin.saveSettings();
+				this._plugin._settings.dbTrustServerCertificate = value;
+				await this._plugin.saveSettings();
 				}));
 
 		containerEl.createEl('h2', { text: 'Other Settings' });
@@ -526,20 +617,20 @@ class LabBookSettingTab extends PluginSettingTab {
 			.setName('Input Date Format')
 			.addText(text => text
 				.setPlaceholder('YYYY-MM-DD')
-				.setValue(this.plugin.settings.inputDateFormat)
+				.setValue(this._plugin._settings.inputDateFormat)
 				.onChange(async (value) => {
-				this.plugin.settings.inputDateFormat = value;
-				await this.plugin.saveSettings();
+				this._plugin._settings.inputDateFormat = value;
+				await this._plugin.saveSettings();
 				}));
 
 		new Setting(containerEl)
 		.setName('Input Time Format')
 		.addText(text => text
 			.setPlaceholder('HH:mm')
-			.setValue(this.plugin.settings.inputTimeFormat)
+			.setValue(this._plugin._settings.inputTimeFormat)
 			.onChange(async (value) => {
-			this.plugin.settings.inputTimeFormat = value;
-			await this.plugin.saveSettings();
+			this._plugin._settings.inputTimeFormat = value;
+			await this._plugin.saveSettings();
 			}));
 	}
 }
