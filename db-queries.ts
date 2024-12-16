@@ -230,7 +230,7 @@ export async function queryMissingSites(config: DBConfig, siteIDs: number[]): Pr
   }
 }
 
-export async function queryWrongStacksForAnimal(config: DBConfig, animalID: string, stackIDs: number[]): Promise<number[]> {
+export async function queryInvalidStacksForAnimal(config: DBConfig, animalID: string, stackIDs: number[]): Promise<number[]> {
   if (!stackIDs || stackIDs.length === 0) {
     throw new Error("Parameter stackIDs is empty.");
   }
@@ -278,7 +278,7 @@ export async function queryWrongStacksForAnimal(config: DBConfig, animalID: stri
   }
 }
 
-export async function queryWrongExperimentsForAnimal(config: DBConfig, animalID: string, expIDs: number[]): Promise<number[]> {
+export async function queryInvalidExperimentsForAnimal(config: DBConfig, animalID: string, expIDs: number[]): Promise<number[]> {
   if (!expIDs || expIDs.length === 0) {
     throw new Error("Parameter expIDs is empty.");
   }
@@ -326,7 +326,7 @@ export async function queryWrongExperimentsForAnimal(config: DBConfig, animalID:
   }
 }
 
-export async function queryWrongSitesForAnimal(config: DBConfig, animalID: string, siteIDs: number[]): Promise<number[]> {
+export async function queryInvalidSitesForAnimal(config: DBConfig, animalID: string, siteIDs: number[]): Promise<number[]> {
   if (!siteIDs || siteIDs.length === 0) {
     throw new Error("Parameter siteIDs is empty.");
   }

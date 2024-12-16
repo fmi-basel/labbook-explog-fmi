@@ -115,7 +115,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 		try {
 			const file = this.app.workspace.getActiveFile();
 			if (!file) {
-				new Notice("No active file to export data.");
+				new CustomNotice("No active file to export data.", "warning-notice");
 				return;
 			}
 
@@ -128,7 +128,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 				if (animalID) {
 					await this.updateYamlMetadata(file, { AnimalID: animalID });
 				} else {
-					new Notice("No animal selected.");
+					new CustomNotice("No animal selected.", "warning-notice");
 					return;
 				}
 			}
@@ -137,20 +137,20 @@ export default class LabBookExpLogPlugin extends Plugin {
 			}
 
 			if (!animalID) {
-				new Notice("No AnimalID found in properties.");
+				new CustomNotice("No AnimalID found in properties.", "warning-notice");
 				return;
 			}
 
 			const animalExists = await existsAnimal(this._dbConfig, animalID);
 			if (!animalExists) {
-				new Notice("Animal not found in database.");
+				new CustomNotice("Animal not found in database.", "warning-notice");
 				return;
 			}
 
 			// Some initial validations
 			const exportData = await this.extractExpLogData();
 			if (!exportData || exportData.length === 0) {
-				new Notice("No data to be exported.");
+				new CustomNotice("No data to be exported.", "warning-notice");
 				return;
 			}
 			
@@ -164,7 +164,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 					}
 				}
 				const invalidRowsOutput = invalidRows.join(", ");
-				new Notice(`There is invalid data!\n\nPlease make sure to provide correct data for Date, Time, StackID, ExpID and SiteID. Empty rows are skipped by default.\n\nRows: ${invalidRowsOutput}`);
+				new CustomNotice(`There is invalid data!\n\nPlease make sure to provide correct data for Date, Time, StackID, ExpID and SiteID. Empty rows are skipped by default.\n\nRows: ${invalidRowsOutput}`, "warning-notice");
 				return;
 			}
 
@@ -178,13 +178,13 @@ export default class LabBookExpLogPlugin extends Plugin {
 					}
 				}
 				const incompleteRowsOutput = incompleteRows.join(", ");
-				new Notice(`There is incomplete data!\n\nPlease make sure to provide Date, Time, StackID, ExpID and SiteID. Empty rows are skipped by default.\n\nRows: ${incompleteRowsOutput}`);
+				new CustomNotice(`There is incomplete data!\n\nPlease make sure to provide Date, Time, StackID, ExpID and SiteID. Empty rows are skipped by default.\n\nRows: ${incompleteRowsOutput}`, "warning-notice");
 				return;
 			}
 
 			const actualExportData = exportData.filter(p => !p.isEmpty());
 			if (!actualExportData || actualExportData.length === 0) {
-				new Notice("No data to be exported.");
+				new CustomNotice("No data to be exported.", "warning-notice");
 				return;
 			}
 
@@ -193,15 +193,16 @@ export default class LabBookExpLogPlugin extends Plugin {
 			const exportModal = new ExportWizardModal(this.app, this._dbConfig, animalID, actualExportData);
 			const errorResult = await exportModal.openWithPromise();
 			if (!errorResult) {
-				new Notice(`Data for '${animalID}' has been exported successfully.`);
+				new CustomNotice(`Data for '${animalID}' has been exported successfully.`, "success-notice");
 			}
 			else {
-				new Notice(`Sorry, data for '${animalID}' has not been exported.`);
+				new CustomNotice(`Sorry, data for '${animalID}' has not been exported.`, "warning-notice");
+				new CustomNotice(errorResult, "error-notice");
 			}
 		}
 		catch (err) {
 			console.error("Failed to export:", err);
-			new Notice(err.message); 
+			new CustomNotice(err.message, "error-notice");
 		}
 	}
 
@@ -466,7 +467,7 @@ class QueryAnimalModal extends Modal {
 			} catch (err) {
 				console.error("Failed to load PIs:", err);
 				dropdown.addOption("error", "Error loading PIs");
-				new Notice(err.message); 
+				new CustomNotice(err.message, "error-notice");
 			}
 
 			// Handle dropdown value change
@@ -633,4 +634,14 @@ class LabBookSettingTab extends PluginSettingTab {
 			await this._plugin.saveSettings();
 			}));
 	}
+}
+
+class CustomNotice extends Notice {
+    constructor(message: string, cssClass?: string, timeout: number = 4000) {
+        super(message, timeout); // Call the parent class constructor
+        if (cssClass) {
+            const noticeEl = this.noticeEl; // Access the underlying DOM element
+            noticeEl.classList.add(cssClass); // Apply the custom CSS class
+        }
+    }
 }

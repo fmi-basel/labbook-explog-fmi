@@ -1,6 +1,6 @@
 import { Modal, App, Setting, Notice } from "obsidian";
 import { ExportData } from "./export-data";
-import { queryMissingSites, DBConfig, queryWrongStacksForAnimal, queryWrongExperimentsForAnimal, queryWrongSitesForAnimal } from "db-queries";
+import { queryMissingSites, DBConfig, queryInvalidStacksForAnimal, queryInvalidExperimentsForAnimal, queryInvalidSitesForAnimal } from "db-queries";
 import { ifError } from "assert";
 
 export class ExportWizardModal extends Modal {
@@ -31,12 +31,14 @@ export class ExportWizardModal extends Modal {
 
     async onOpen() {
         if (!this._animalID) {
-            new Notice("Animal ID is required.");
+            this._result = "Animal ID is required.";
+            this._resolvePromise(this._result);
             this.close();
             return;
         }
         if (!this._exportData || this._exportData.length === 0) {
-            new Notice("Export data is required.");
+            this._result = "Export data is required.";
+            this._resolvePromise(this._result);
             this.close();
             return;
         }
@@ -50,7 +52,8 @@ export class ExportWizardModal extends Modal {
             || (!currentExpIDs || currentExpIDs.length === 0)
             || (!currentSiteIDs || currentSiteIDs.length === 0)
         ) {
-            new Notice("StackIDs, ExpIDs and SiteIDs must be available in export data.");
+            this._result = "StackIDs, ExpIDs and SiteIDs must be available in export data.";
+            this._resolvePromise(this._result);
             this.close();
             return;
         }
@@ -64,31 +67,53 @@ export class ExportWizardModal extends Modal {
         console.log(`Distinct SiteIDs: ${distinctSiteIDs}`);
         console.log(`Missing SiteIDs: ${this._missingSitesIDs}`);
 
-        // Validate stacks, exps and sites belonging to correct animal
-        const wrongStackIDs = await queryWrongStacksForAnimal(this._dbConfig, this._animalID, distinctStackIDs);
-        const wrongExpIDs = await queryWrongExperimentsForAnimal(this._dbConfig, this._animalID, distinctExpIDs);
-        const wrongSiteIDs = await queryWrongSitesForAnimal(this._dbConfig, this._animalID, distinctSiteIDs);
-
-        if ((wrongStackIDs && wrongStackIDs.length > 0)
-            || (wrongExpIDs && wrongExpIDs.length > 0)
-            || (wrongSiteIDs && wrongSiteIDs.length > 0)
-        ) {
-            //TODO: Specific notice
-            new Notice("Some StackIDs, ExpIDs or SiteIDs are belonging to different animal.");
+        const validationResult = await this.ValidateExportData(distinctStackIDs, distinctExpIDs, distinctSiteIDs);
+        if (validationResult) {
+            this._result = validationResult;
+            this._resolvePromise(this._result);
             this.close();
             return;
         }
+
+
         
         // Initialize with step 1
         //this.renderCurrentStep(); //TODO
     }
 
-    async ValidateExportData(): Promise<string | null> {
-        let validationResult : string | null = null;
+    async ValidateExportData(stackIDs: number[], expIDs: number[], siteIDs: number[]): Promise<string> { //Promise<string | null>
+        const messages: string[] = [];
 
+        // Check, if provided stackIDs, expIDs and siteIDs (which already exist) are belonging to this animal
+        const invalidStackIDs = await queryInvalidStacksForAnimal(this._dbConfig, this._animalID, stackIDs);
+        const invalidExpIDs = await queryInvalidExperimentsForAnimal(this._dbConfig, this._animalID, expIDs);
+        const invalidSiteIDs = await queryInvalidSitesForAnimal(this._dbConfig, this._animalID, siteIDs);
 
+        if ((invalidStackIDs && invalidStackIDs.length > 0)
+            || (invalidExpIDs && invalidExpIDs.length > 0)
+            || (invalidSiteIDs && invalidSiteIDs.length > 0)
+        ) {
+            messages.push("Some StackIDs, ExpIDs or SiteIDs are belonging to different animal.");
+            if (invalidStackIDs && invalidStackIDs.length > 0) {
+                messages.push(`StackIDs: ${invalidStackIDs.join(", ")}`);
+            }
+            if (invalidExpIDs && invalidExpIDs.length > 0) {
+                messages.push(`ExpIDs: ${invalidExpIDs.join(", ")}`);
+            }
+            if (invalidSiteIDs && invalidSiteIDs.length > 0) {
+                messages.push(`SiteIDs: ${invalidSiteIDs.join(", ")}`);
+            }
+        }
 
-        return validationResult;
+        // Check, if for each missing Site there is corresponding Experiment with same ID
+        if (this._missingSitesIDs && this._missingSitesIDs.length > 0) {
+            this._missingSitesIDs.forEach(siteID => {
+                //TODO
+                
+            });
+        }
+
+        return messages.join("\n");
     }
 
     onClose() {
