@@ -14,97 +14,64 @@ export interface SiteItem {
     displayText: string;
 }
 
-export async function queryPIs(config: DBConfig): Promise<string[]> {
-    const pool = new sql.ConnectionPool({
-        user: config.user,
-        password: config.password,
-        server: config.server,
-        database: config.database,
-        options: {
-            encrypt: config.encrypt,
-            trustServerCertificate: config.trustServerCertificate,
-        },
-    });
-    const poolConnect = pool.connect();
-
-    pool.on('error', err => {
-        console.error('SQL Pool Error: ', err);
-        throw new Error(`SQL Pool Error: ${err.message}`);
-    });
-
-    try {
-        await poolConnect; // ensures that the pool has been created
-        const result = await pool.request()
-        .query('select distinct PI from dbo.Animals where PI is not NULL and DataDeleted = 0 order by PI asc;');
-
-        console.log('Query Results (PIs):', result.recordset);
-        return result.recordset.map((row) => row.PI as string); // Return the query result
-    }
-    catch (err) {
-        console.error('SQL Error', err);
-        throw new Error(`SQL Error: ${err.message}`);
-    }
-    finally {
-        await pool.close(); // Properly closes the connection pool
-    }
-}
-
-export async function queryAnimals(config: DBConfig, pi: string): Promise<string[]> {
+// Internal utility function handling ConnectionPool and query execution
+async function withDatabase<T>(
+  config: DBConfig,
+  callback: (pool: sql.ConnectionPool) => Promise<T>
+): Promise<T> {
   const pool = new sql.ConnectionPool({
-    user: config.user,
-    password: config.password,
-    server: config.server,
-    database: config.database,
-    options: {
-        encrypt: config.encrypt,
-        trustServerCertificate: config.trustServerCertificate,
-    },
+      user: config.user,
+      password: config.password,
+      server: config.server,
+      database: config.database,
+      options: {
+          encrypt: config.encrypt,
+          trustServerCertificate: config.trustServerCertificate,
+      },
   });
+
   const poolConnect = pool.connect();
 
-  pool.on('error', err => {
-    console.error('SQL Pool Error: ', err);
-    throw new Error(`SQL Pool Error: ${err.message}`);
+  pool.on("error", (err) => {
+      console.error("SQL Pool Error: ", err);
+      throw new Error(`SQL Pool Error: ${err.message}`);
   });
 
   try {
-    await poolConnect; // ensures that the pool has been created
+      await poolConnect; // Ensure pool connection is established
+      const result = await callback(pool); // Execute query logic using the pool
+      return result;
+  } catch (err) {
+      console.error("SQL Error", err);
+      throw new Error(`SQL Error: ${err.message}`);
+  } finally {
+      await pool.close(); // Ensure the connection pool is closed
+  }
+}
+
+export async function queryPIs(config: DBConfig): Promise<string[]> {
+  return withDatabase(config, async (pool) => {
     const result = await pool.request()
-        .input("pi", sql.VarChar, pi)
+      .query('select distinct PI from dbo.Animals where PI is not NULL and DataDeleted = 0 order by PI asc;');
+
+      console.log('Query Results (PIs):', result.recordset);
+      return result.recordset.map((row) => row.PI as string); // Return the query result
+  });
+}
+
+export async function queryAnimals(config: DBConfig, pi: string): Promise<string[]> {
+  return withDatabase(config, async (pool) => {
+    const result = await pool.request()
+      .input("pi", sql.VarChar, pi)
       .query("select AnimalID from dbo.Animals where PI is not NULL and PI = @pi and DataDeleted = 0 order by AnimalID asc;");
 
     console.log('Query Results (Animals):', result.recordset);
     return result.recordset.map((row) => row.AnimalID as string); // Return the query result
-  }
-  catch (err) {
-    console.error('SQL Error', err);
-    throw new Error(`SQL Error: ${err.message}`);
-  }
-  finally {
-    await pool.close(); // Properly closes the connection pool
-  }
+  });
 }
 
 export async function existsAnimal(config: DBConfig, animalID: string): Promise<boolean> {
-  const pool = new sql.ConnectionPool({
-    user: config.user,
-    password: config.password,
-    server: config.server,
-    database: config.database,
-    options: {
-        encrypt: config.encrypt,
-        trustServerCertificate: config.trustServerCertificate,
-    },
-  });
-  const poolConnect = pool.connect();
-
-  pool.on('error', err => {
-    console.error('SQL Pool Error: ', err);
-    throw new Error(`SQL Pool Error: ${err.message}`);
-  });
-
-  try {
-    await poolConnect; // ensures that the pool has been created
+  return withDatabase(config, async (pool) => {
     const result = await pool.request()
       .input("animalID", sql.VarChar, animalID)
       .query("select count(*) as Cnt from dbo.Animals where AnimalID = @animalID and DataDeleted = 0;");
@@ -113,37 +80,12 @@ export async function existsAnimal(config: DBConfig, animalID: string): Promise<
     console.log('Exists Result (Animal):', count > 0);
 
     return count > 0;
-  }
-  catch (err) {
-    console.error('SQL Error', err);
-    throw new Error(`SQL Error: ${err.message}`);
-  }
-  finally {
-    await pool.close(); // Properly closes the connection pool
-  }
+  });
 }
 
 export async function querySites(config: DBConfig, animalID: string): Promise<SiteItem[]> {
-    const pool = new sql.ConnectionPool({
-        user: config.user,
-        password: config.password,
-        server: config.server,
-        database: config.database,
-        options: {
-            encrypt: config.encrypt,
-            trustServerCertificate: config.trustServerCertificate,
-        },
-    });
-    const poolConnect = pool.connect();
-
-    pool.on('error', err => {
-      console.error('SQL Pool Error: ', err);
-      throw new Error(`SQL Pool Error: ${err.message}`);
-    });
-
-    try {
-      await poolConnect; // ensures that the pool has been created
-      const result = await pool.request()
+  return withDatabase(config, async (pool) => {
+    const result = await pool.request()
       .input("animalID", sql.Int, animalID)
       .query(`
         select s.SiteID, (cast(s.SiteID as varchar(10)) + ':' + (case when st.Comment is not NULL then left(st.Comment, 50) else '' end)) as Display from dbo.Sites s
@@ -160,14 +102,7 @@ export async function querySites(config: DBConfig, animalID: string): Promise<Si
         siteID: row.SiteID,
         displayText: row.Display,
       }));
-    }
-    catch (err) {
-      console.error('SQL Error', err);
-      throw new Error(`SQL Error: ${err.message}`);
-    }
-    finally {
-      await pool.close(); // Properly closes the connection pool
-    }
+  });
 }
 
 export async function queryMissingSites(config: DBConfig, siteIDs: number[]): Promise<number[]> {
@@ -175,28 +110,9 @@ export async function queryMissingSites(config: DBConfig, siteIDs: number[]): Pr
     throw new Error("Parameter siteIDs is empty.");
   }
 
-  const pool = new sql.ConnectionPool({
-      user: config.user,
-      password: config.password,
-      server: config.server,
-      database: config.database,
-      options: {
-          encrypt: config.encrypt,
-          trustServerCertificate: config.trustServerCertificate,
-      },
-  });
-  const poolConnect = pool.connect();
+  return withDatabase(config, async (pool) => {
+    const siteIDsJoined = siteIDs.join(", ");
 
-  pool.on('error', err => {
-    console.error('SQL Pool Error: ', err);
-    throw new Error(`SQL Pool Error: ${err.message}`);
-  });
-
-  const siteIDsJoined = siteIDs.join(", ");
-
-  try {
-    await poolConnect; // ensures that the pool has been created
-    // Make sure to include soft-deleted sites as well in this case!
     const result = await pool.request()
       .query(`
         select s.SiteID from dbo.Sites s
@@ -220,14 +136,7 @@ export async function queryMissingSites(config: DBConfig, siteIDs: number[]): Pr
     });
 
     return missingSiteIDs;
-  }
-  catch (err) {
-    console.error('SQL Error', err);
-    throw new Error(`SQL Error: ${err.message}`);
-  }
-  finally {
-    await pool.close(); // Properly closes the connection pool
-  }
+  });
 }
 
 export async function queryInvalidStacksForAnimal(config: DBConfig, animalID: string, stackIDs: number[]): Promise<number[]> {
@@ -235,28 +144,9 @@ export async function queryInvalidStacksForAnimal(config: DBConfig, animalID: st
     throw new Error("Parameter stackIDs is empty.");
   }
 
-  const pool = new sql.ConnectionPool({
-      user: config.user,
-      password: config.password,
-      server: config.server,
-      database: config.database,
-      options: {
-          encrypt: config.encrypt,
-          trustServerCertificate: config.trustServerCertificate,
-      },
-  });
-  const poolConnect = pool.connect();
+  return withDatabase(config, async (pool) => {
+    const stackIDsJoined = stackIDs.join(", ");
 
-  pool.on('error', err => {
-    console.error('SQL Pool Error: ', err);
-    throw new Error(`SQL Pool Error: ${err.message}`);
-  });
-
-  const stackIDsJoined = stackIDs.join(", ");
-
-  try {
-    await poolConnect; // ensures that the pool has been created
-    // Make sure to include soft-deleted sites as well in this case!
     const result = await pool.request()
       .input("animalID", sql.VarChar, animalID)
       .query(`
@@ -268,14 +158,7 @@ export async function queryInvalidStacksForAnimal(config: DBConfig, animalID: st
 
     const wrongStackIDs = result.recordset.map((row) => row.StackID as number);
     return wrongStackIDs;
-  }
-  catch (err) {
-    console.error('SQL Error', err);
-    throw new Error(`SQL Error: ${err.message}`);
-  }
-  finally {
-    await pool.close(); // Properly closes the connection pool
-  }
+  });
 }
 
 export async function queryInvalidExperimentsForAnimal(config: DBConfig, animalID: string, expIDs: number[]): Promise<number[]> {
@@ -283,28 +166,9 @@ export async function queryInvalidExperimentsForAnimal(config: DBConfig, animalI
     throw new Error("Parameter expIDs is empty.");
   }
 
-  const pool = new sql.ConnectionPool({
-      user: config.user,
-      password: config.password,
-      server: config.server,
-      database: config.database,
-      options: {
-          encrypt: config.encrypt,
-          trustServerCertificate: config.trustServerCertificate,
-      },
-  });
-  const poolConnect = pool.connect();
+  return withDatabase(config, async (pool) => {
+    const expIDsJoined = expIDs.join(", ");
 
-  pool.on('error', err => {
-    console.error('SQL Pool Error: ', err);
-    throw new Error(`SQL Pool Error: ${err.message}`);
-  });
-
-  const expIDsJoined = expIDs.join(", ");
-
-  try {
-    await poolConnect; // ensures that the pool has been created
-    // Make sure to include soft-deleted sites as well in this case!
     const result = await pool.request()
       .input("animalID", sql.VarChar, animalID)
       .query(`
@@ -314,16 +178,9 @@ export async function queryInvalidExperimentsForAnimal(config: DBConfig, animalI
           order by e.ExpID asc;
       `);
 
-    const wrongExpIDs = result.recordset.map((row) => row.ExpID as number);
-    return wrongExpIDs;
-  }
-  catch (err) {
-    console.error('SQL Error', err);
-    throw new Error(`SQL Error: ${err.message}`);
-  }
-  finally {
-    await pool.close(); // Properly closes the connection pool
-  }
+      const wrongExpIDs = result.recordset.map((row) => row.ExpID as number);
+      return wrongExpIDs;
+  });
 }
 
 export async function queryInvalidSitesForAnimal(config: DBConfig, animalID: string, siteIDs: number[]): Promise<number[]> {
@@ -331,44 +188,46 @@ export async function queryInvalidSitesForAnimal(config: DBConfig, animalID: str
     throw new Error("Parameter siteIDs is empty.");
   }
 
-  const pool = new sql.ConnectionPool({
-      user: config.user,
-      password: config.password,
-      server: config.server,
-      database: config.database,
-      options: {
-          encrypt: config.encrypt,
-          trustServerCertificate: config.trustServerCertificate,
-      },
-  });
-  const poolConnect = pool.connect();
+  return withDatabase(config, async (pool) => {
+    const siteIDsJoined = siteIDs.join(", ");
 
-  pool.on('error', err => {
-    console.error('SQL Pool Error: ', err);
-    throw new Error(`SQL Pool Error: ${err.message}`);
-  });
-
-  const siteIDsJoined = siteIDs.join(", ");
-
-  try {
-    await poolConnect; // ensures that the pool has been created
-    // Make sure to include soft-deleted sites as well in this case!
     const result = await pool.request()
-      .input("animalID", sql.VarChar, animalID)
-      .query(`
-          select distinct SiteID from dbo.Sites
-          where SiteID in (${siteIDsJoined}) and AnimalID <> @animalID
-          order by SiteID asc;
-      `);
+        .input("animalID", sql.VarChar, animalID)
+        .query(`
+            SELECT DISTINCT SiteID FROM dbo.Sites
+            WHERE SiteID IN (${siteIDsJoined}) AND AnimalID <> @animalID
+            ORDER BY SiteID ASC;
+        `);
 
     const wrongSiteIDs = result.recordset.map((row) => row.SiteID as number);
     return wrongSiteIDs;
-  }
-  catch (err) {
-    console.error('SQL Error', err);
-    throw new Error(`SQL Error: ${err.message}`);
-  }
-  finally {
-    await pool.close(); // Properly closes the connection pool
-  }
+  });
+}
+
+export async function queryProjects(config: DBConfig): Promise<string[]> {
+  return withDatabase(config, async (pool) => {
+    const result = await pool.request()
+        .query(`
+            SELECT DISTINCT Project FROM dbo.Sites
+            WHERE DataDeleted = 0
+            ORDER BY Project ASC;
+        `);
+
+    const projects = result.recordset.map((row) => row.Project as string);
+    return projects;
+  });
+}
+
+export async function queryLocations(config: DBConfig): Promise<string[]> {
+  return withDatabase(config, async (pool) => {
+    const result = await pool.request()
+        .query(`
+            SELECT DISTINCT Location FROM dbo.Sites
+            WHERE DataDeleted = 0
+            ORDER BY Location ASC;
+        `);
+
+    const locations = result.recordset.map((row) => row.Location as string);
+    return locations;
+  });
 }

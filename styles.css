@@ -1,30 +1,30 @@
 .my-addtable-icon, .my-addtable-icon:hover,
 .my-exportdatabase-icon, .my-exportdatabase-icon:hover {
-    color: #6e3778;
+  color: #6e3778;
 }
 
 .my-queryanimal-modal {
-    max-width: 450px;
+  max-width: 450px;
 }
 
 .my-queryanimal-modal select {
-    width: 300px;
+  width: 300px;
 }
 
 /* Spinner Styles */
 .loading-spinner {
-    border: 8px solid #f3f3f3;
-    border-top: 8px solid #3498db;
-    border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    animation: spin 1s linear infinite;
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 1000;
-  }
+  border: 8px solid #f3f3f3;
+  border-top: 8px solid #3498db;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+}
   
 @keyframes spin {
   0% {
@@ -33,6 +33,109 @@
   100% {
     transform: translate(-50%, -50%) rotate(360deg);
   }
+}
+
+.export-wizard-modal {
+  width: 450px;
+  height: 600px;
+  display: flex;
+  flex-direction: column; /* Ensure vertical stacking */
+  box-sizing: border-box;
+  overflow: hidden; /* Prevent unnecessary scrollbars */
+}
+
+.export-wizard-top-title,
+.export-wizard-title {
+  margin-top: 0px;
+  padding-top: 0px;
+  padding-bottom: 5px;
+}
+
+/* Outer container for the entire wizard page */
+.wizard-page-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1; /* Ensure it fills the modal height */
+  height: 100%; /* Full height of the modal */
+}
+
+.wizard-page-container h4 {
+  margin-top: 0px;
+}
+
+/* Content container with scrollable content */
+.wizard-content-container {
+  flex: 1; /* Take up all available space */
+  overflow-y: auto; /* Enable scrolling if content overflows */
+  padding: 0px 10px; /* Consistent spacing */
+}
+
+/* Buttons container */
+.wizard-buttons-container {
+  position: relative; /* Allow positioning of child elements */
+  padding: 5px 10px;
+  height: 50px; /* Fixed height for the button bar */
+}
+
+/* Style for the buttons */
+.wizard-button {
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  border-radius: 4px;
+}
+
+.wizard-button:hover {
+  background-color: var(--interactive-accent-hover);
+}
+
+/* Align Back button to the left */
+.wizard-buttons-container .left-aligned {
+  position: absolute;
+  left: 16px; /* Left padding */
+}
+
+/* Align Next button to the right */
+.wizard-buttons-container .right-aligned {
+  position: absolute;
+  right: 16px; /* Right padding */
+}
+
+.project-type-container,
+.location-type-container {
+  margin-bottom: 10px; /* Spacing below the dropdown */
+}
+
+.project-type-dropdown,
+.location-type-dropdown {
+  width: 100px; /* Fixed width */
+  padding: 4px 8px;
+  border: 1px solid var(--background-modifier-border); /* Obsidian's border color */
+  border-radius: 4px; /* Rounded corners */
+  background-color: var(--background-secondary); /* Obsidian's background color */
+  color: var(--text-normal); /* Text color */
+  cursor: pointer; /* Pointer cursor on hover */
+  appearance: auto; /* Restore native dropdown appearance */
+  display: block; /* Block ensures left alignment */
+  margin: 0; /* Ensure no extra margins */
+}
+
+.project-type-dropdown:focus,
+.location-type-dropdown:focus {
+  outline: none;
+  border-color: var(--interactive-accent); /* Highlight border on focus */
+  box-shadow: 0 0 0 2px var(--background-modifier-border-focus); /* Subtle shadow */
+}
+
+.project-selection-dropdown,
+.project-selection-textbox,
+.location-selection-dropdown,
+.location-selection-textbox,
+.depth-selection-textbox {
+  width: 150px !important;
 }
 
 /* Success Notice */

@@ -1,9 +1,10 @@
 import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, TFile } from 'obsidian';
 import * as yaml from 'js-yaml';
 import moment from "moment"; // A namespace-style import cannot be called or constructed, and will cause a failure at runtime.
-import { queryPIs, queryAnimals, DBConfig, existsAnimal } from "./db-queries";
+import * as dbQueries from "./db-queries";
 import { ExportData } from "./export-data";
 import { ExportWizardModal } from "./export-wizard";
+import { CustomNotice } from "./custom-notice";
 
 interface LabBookExpLogSettings {
 	dbUser: string;
@@ -29,7 +30,7 @@ const DEFAULT_SETTINGS: LabBookExpLogSettings = {
 
 export default class LabBookExpLogPlugin extends Plugin {
 	_settings: LabBookExpLogSettings;
-	_dbConfig: DBConfig;
+	_dbConfig: dbQueries.DBConfig;
 
 	async onload() {
 		await this.loadSettings();
@@ -141,7 +142,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 				return;
 			}
 
-			const animalExists = await existsAnimal(this._dbConfig, animalID);
+			const animalExists = await dbQueries.existsAnimal(this._dbConfig, animalID);
 			if (!animalExists) {
 				new CustomNotice("Animal not found in database.", "warning-notice");
 				return;
@@ -197,7 +198,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 			}
 			else {
 				new CustomNotice(`Sorry, data for '${animalID}' has not been exported.`, "warning-notice");
-				new CustomNotice(errorResult, "error-notice");
+				new CustomNotice(errorResult, "error-notice", 10000);
 			}
 		}
 		catch (err) {
@@ -419,12 +420,12 @@ export default class LabBookExpLogPlugin extends Plugin {
 
 class QueryAnimalModal extends Modal {
 	_plugin: LabBookExpLogPlugin;
-	_dbConfig: DBConfig
+	_dbConfig: dbQueries.DBConfig
 	private _resolvePromise: (value: string | null) => void; // Function to resolve the Promise
   	private _result: string | null = null; // To store the result
 	private _animalDropdown: any; // Used for referencing by the other dropdown (PI)
 	
-	constructor(app: App, dbConfig: DBConfig, plugin: LabBookExpLogPlugin) {
+	constructor(app: App, dbConfig: dbQueries.DBConfig, plugin: LabBookExpLogPlugin) {
 	  super(app);
 	  this._dbConfig = dbConfig;
 	  this._plugin = plugin;
@@ -455,7 +456,7 @@ class QueryAnimalModal extends Modal {
 			
 			try {
 				// Fetch the list of PIs
-				const piList = await queryPIs(this._dbConfig);
+				const piList = await dbQueries.queryPIs(this._dbConfig);
 
 				// Populate the dropdown with PIs
 				if (piList) {
@@ -474,7 +475,7 @@ class QueryAnimalModal extends Modal {
 			dropdown.onChange(async (value) => {
 				if (value) {
 					console.log(`Selected PI: ${value}`);
-					const animalIDList = await queryAnimals(this._dbConfig, value);
+					const animalIDList = await dbQueries.queryAnimals(this._dbConfig, value);
 
 					// Reset and populate the second dropdown
 					this._animalDropdown.selectEl.innerHTML = ""; // Clear previous options
@@ -634,14 +635,4 @@ class LabBookSettingTab extends PluginSettingTab {
 			await this._plugin.saveSettings();
 			}));
 	}
-}
-
-class CustomNotice extends Notice {
-    constructor(message: string, cssClass?: string, timeout: number = 4000) {
-        super(message, timeout); // Call the parent class constructor
-        if (cssClass) {
-            const noticeEl = this.noticeEl; // Access the underlying DOM element
-            noticeEl.classList.add(cssClass); // Apply the custom CSS class
-        }
-    }
 }
