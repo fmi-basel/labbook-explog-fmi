@@ -159,7 +159,7 @@ export class ExportWizardModal extends Modal {
                 this.renderStepNewSite();
                 break;
             case 2:
-                this.renderStepSubmit();
+                this.renderStepFinish();
                 break;
             default:
                 this._resolvePromise(this._result);
@@ -198,7 +198,7 @@ export class ExportWizardModal extends Modal {
         const page = new NewSiteWizardPage(contentEl, this._animalID, currSiteID, this._missingSiteIDsIndex, this._missingSitesIDs.length, this._projects, this._locations);
         page.onSuccess(async (result) => {
             try {
-                await dbQueries.addNewSite(this._dbConfig, this._animalID, result.project, result.location, result.depth);
+                await dbQueries.addNewSite(this._dbConfig, currSiteID, this._animalID, result.project, result.location, result.depth);
                 new CustomNotice(`New site ${currSiteID} added successfully.`, "success-notice");
 
                 this._missingSiteIDsIndex++;
@@ -213,21 +213,44 @@ export class ExportWizardModal extends Modal {
         });
     }
 
-    private async renderStepSubmit() {
-        //TODO
+    private async renderStepFinish() {
+        console.log("renderStepFinish"); //debug
+        const { contentEl, modalEl } = this;
+        modalEl.classList.add("finish-wizard-page");
 
-    }
+        const page = new FinishWizardPage(contentEl, this._animalID, this._exportData);
+        page.onSuccess(async (result) => {
+            try {
+                if (this._exportData && this._exportData.length > 0) {
+                    for (const data of this._exportData) {
+                        const countExp = await dbQueries.executeScalar<number>(this._dbConfig, "SELECT COUNT(*) AS Cnt FROM dbo.Experiments WHERE ExpID = @ExpID;", { ExpID: data.expID });
+                        if (countExp == 0) {
+                            await dbQueries.executeNonQuery(this._dbConfig, "INSERT INTO dbo.Experiments (ExpID, SiteID) VALUES (@ExpID, @SiteID);", { ExpID: data.expID, SiteID: data.siteID });
+                            new CustomNotice(`New experiment ${data.expID} added successfully.`, "success-notice");
+                        }
 
-    private nextStep() {
-        this._currentStep++;
-        this.renderCurrentStep();
-    }
 
-    private previousStep() {
-        if (this._currentStep > 0) {
-            this._currentStep--;
-            this.renderCurrentStep();
-        }
+                    };
+
+                    //this._wasCancelled = false;
+                }
+                //await dbQueries.addNewSite(this._dbConfig, this._animalID, result.project, result.location, result.depth);
+                //new CustomNotice(`New site ${currSiteID} added successfully.`, "success-notice");
+
+                //this._missingSiteIDsIndex++;
+                //if (!(this._missingSiteIDsIndex + 1 <= this._missingSitesIDs.length)) {
+                //    this._currentStep++;
+                //}
+                //await this.renderCurrentStep();
+            }
+            catch(err) {
+                new CustomNotice(err.message, "error-notice");
+            }
+        });
+        
+        page.onCancelled(async () => {
+            this.close();
+        });
     }
 
     onClose() {
@@ -457,7 +480,7 @@ class NewSiteWizardPage extends WizardPage {
     }
 
     protected onBack(): void {
-        console.log("Back button clicked - Navigate to the previous step.");
+        console.log("Back button clicked - cancellation.");
         this.triggerCancelled();
     }
 
@@ -488,5 +511,38 @@ class NewSiteWizardPage extends WizardPage {
             location: this._currentLocationName,
             currentDepth,
         });
+    }
+}
+
+class FinishWizardPage extends WizardPage {
+    private _exportData: ExportData[] = [];
+
+    constructor(parentEl: HTMLElement, animalID: string, exportData: ExportData[]) {
+        super(parentEl, animalID, "Cancel", "Finish");
+
+        this._exportData = exportData;
+        this.renderPageContent();
+    }
+
+    private renderPageContent() {
+        const { _containerEl: containerEl } = this;
+        containerEl.empty(); // Clear previous content
+
+        const titleEl = containerEl.createEl("h4", { text: "Please click on Finish button." });
+        titleEl.classList.add("export-wizard-title");
+        const descriptionEl = containerEl.createEl("p", { text: `The number of rows exported will be ${this._exportData.length}.` });
+
+        // Call the parent renderPage to display content and buttons
+        this.renderPage([titleEl, descriptionEl], true, true);
+    }
+
+    protected onBack(): void {
+        console.log("Back button clicked - cancellation.");
+        this.triggerCancelled();
+    }
+
+    protected async onNext(): Promise<void> {
+        // Just trigger success - export is handled in callback.
+        this.triggerSuccess();
     }
 }

@@ -15,10 +15,7 @@ export interface SiteItem {
 }
 
 // Internal utility function handling ConnectionPool and query execution
-async function withDatabase<T>(
-  config: DBConfig,
-  callback: (pool: sql.ConnectionPool) => Promise<T>
-): Promise<T> {
+async function withDatabase<T>(config: DBConfig, callback: (pool: sql.ConnectionPool) => Promise<T>): Promise<T> {
   const pool = new sql.ConnectionPool({
       user: config.user,
       password: config.password,
@@ -47,6 +44,35 @@ async function withDatabase<T>(
   } finally {
       await pool.close(); // Ensure the connection pool is closed
   }
+}
+
+// ExecuteReader: For returning rows
+export async function executeReader(config: DBConfig, query: string, params: { [key: string]: any } = {}): Promise<sql.IResult<any>> {
+  return withDatabase(config, async (pool) => {
+      const request = pool.request();
+      for (const key in params) {
+          request.input(key, params[key]);
+      }
+      return await request.query(query);
+  });
+}
+
+// ExecuteScalar: For returning a single value
+export async function executeScalar<T>(config: DBConfig, query: string, params: { [key: string]: any } = {}): Promise<T> {
+  const result = await executeReader(config, query, params);
+  return result.recordset[0]?.[Object.keys(result.recordset[0])[0]] as T;
+}
+
+// ExecuteNonQuery: For inserts/updates/deletes
+export async function executeNonQuery(config: DBConfig, query: string, params: { [key: string]: any } = {}): Promise<number> {
+  return withDatabase(config, async (pool) => {
+      const request = pool.request();
+      for (const key in params) {
+          request.input(key, params[key]);
+      }
+      const result = await request.query(query);
+      return result.rowsAffected[0]; // Returns the number of affected rows
+  });
 }
 
 export async function queryPIs(config: DBConfig): Promise<string[]> {
@@ -232,6 +258,7 @@ export async function queryLocations(config: DBConfig): Promise<string[]> {
   });
 }
 
-export async function addNewSite(config: DBConfig, animalID: string, project: string, location: string, depth: number | null): Promise<void> {
-
+export async function addNewSite(config: DBConfig, siteID: number, animalID: string, project: string, location: string, depth: number | null): Promise<number> {
+  const sql = "INSERT INTO dbo.Sites (SiteID, AnimalID, Project, Location, Depth) VALUES (@SiteID, @AnimalID, @Project, @Location, @Depth);";
+  return await executeNonQuery(config, sql, { SiteID: siteID, AnimalID: animalID, Project: project, Location: location, Depth: depth });
 }

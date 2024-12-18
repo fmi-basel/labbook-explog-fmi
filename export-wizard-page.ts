@@ -3,15 +3,27 @@
 export abstract class WizardPage {
     protected _containerEl: HTMLElement;
     private _backButtonEl: HTMLButtonElement | null = null;
+    private _backButtonText: string;
     private _nextButtonEl: HTMLButtonElement | null = null;
+    private _nextButtonText: string;
+
     protected _animalID: string;
 
     private _onSuccess?: (...args: any[]) => void;
     private _onCancelled?: () => void;
 
-    constructor(parentEl: HTMLElement, animalID: string) {
+    constructor(parentEl: HTMLElement, animalID: string, backButtonText: string = "Back", nextButtonText: string = "Next") {
         this._containerEl = parentEl.createDiv({ cls: "wizard-page" });
         this._animalID = animalID;
+
+        this._backButtonText = backButtonText;
+        if (!this._backButtonText) {
+            this._backButtonText = "Back";
+        }
+        this._nextButtonText = nextButtonText;
+        if (!this._nextButtonText) {
+            this._nextButtonText = "Next";
+        }
     }
 
     // Setup callbacks
@@ -63,7 +75,7 @@ export abstract class WizardPage {
 
         // Back Button
         if (showBack) {
-            this._backButtonEl = buttonsContainer.createEl("button", { text: "Back" });
+            this._backButtonEl = buttonsContainer.createEl("button", { text: this._backButtonText });
             this._backButtonEl.classList.add("wizard-button");
             this._backButtonEl.classList.add("left-aligned");
             this._backButtonEl.onclick = () => this.onBack();
@@ -71,7 +83,7 @@ export abstract class WizardPage {
 
         // Next Button
         if (showNext) {
-            this._nextButtonEl = buttonsContainer.createEl("button", { text: "Next" });
+            this._nextButtonEl = buttonsContainer.createEl("button", { text: this._nextButtonText });
             this._nextButtonEl.classList.add("wizard-button");
             this._nextButtonEl.classList.add("right-aligned");
             this._nextButtonEl.onclick = () => this.onNext();

@@ -44,6 +44,10 @@
   overflow: hidden; /* Prevent unnecessary scrollbars */
 }
 
+.export-wizard-modal.finish-wizard-page {
+  height: 250px;
+}
+
 .export-wizard-top-title,
 .export-wizard-title {
   margin-top: 0px;
@@ -75,6 +79,10 @@
   position: relative; /* Allow positioning of child elements */
   padding: 5px 10px;
   height: 50px; /* Fixed height for the button bar */
+}
+
+.export-wizard-modal.finish-wizard-page .wizard-buttons-container {
+  padding: 20px 10px;
 }
 
 /* Style for the buttons */
