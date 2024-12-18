@@ -4,6 +4,7 @@ import { WizardPage } from "./export-wizard-page"
 import { CustomNotice } from "./custom-notice";
 import * as utils from "./utils"
 import * as dbQueries from "db-queries";
+import moment from "moment"; // A namespace-style import cannot be called or constructed, and will cause a failure at runtime.
 
 export class ExportWizardModal extends Modal {
     _dbConfig: dbQueries.DBConfig;
@@ -199,7 +200,7 @@ export class ExportWizardModal extends Modal {
         page.onSuccess(async (result) => {
             try {
                 await dbQueries.addNewSite(this._dbConfig, currSiteID, this._animalID, result.project, result.location, result.depth);
-                new CustomNotice(`New site ${currSiteID} added successfully.`, "success-notice");
+                new CustomNotice(`New Site ${currSiteID} added successfully.`, "success-notice");
 
                 this._missingSiteIDsIndex++;
                 if (!(this._missingSiteIDsIndex + 1 <= this._missingSitesIDs.length)) {
@@ -223,25 +224,36 @@ export class ExportWizardModal extends Modal {
             try {
                 if (this._exportData && this._exportData.length > 0) {
                     for (const data of this._exportData) {
-                        const countExp = await dbQueries.executeScalar<number>(this._dbConfig, "SELECT COUNT(*) AS Cnt FROM dbo.Experiments WHERE ExpID = @ExpID;", { ExpID: data.expID });
+                        // Experiment
+                        const dataExp = { ExpID: data.expID, SiteID: data.siteID };
+                        const countExp = await dbQueries.executeNonQuery(this._dbConfig, "UPDATE dbo.Experiments SET SiteID = @SiteID WHERE ExpID = @ExpID;", dataExp);
                         if (countExp == 0) {
-                            await dbQueries.executeNonQuery(this._dbConfig, "INSERT INTO dbo.Experiments (ExpID, SiteID) VALUES (@ExpID, @SiteID);", { ExpID: data.expID, SiteID: data.siteID });
-                            new CustomNotice(`New experiment ${data.expID} added successfully.`, "success-notice");
+                            // If there was no update, then Experiment not yet exists
+                            await dbQueries.executeNonQuery(this._dbConfig, "INSERT INTO dbo.Experiments (ExpID, SiteID) VALUES (@ExpID, @SiteID);", dataExp);
+                            new CustomNotice(`New Experiment ${data.expID} added successfully.`, "success-notice");
+                        }
+                        else {
+                            new CustomNotice(`Experiment ${data.expID} updated successfully.`, "success-notice");
                         }
 
-
+                        // Stack
+                        const stackDate = new Date(data.logDateTime!.getFullYear(), data.logDateTime!.getMonth(), data.logDateTime!.getDate());
+                        const stackTime = moment(data.logDateTime!).format("HH:mm:ss");
+                        const dataStack = { StackID: data.stackID, ExpID: data.expID, StackDate: stackDate, StackTime: stackTime, Comment: data.comment };
+                        const countStack = await dbQueries.executeNonQuery(this._dbConfig, "UPDATE dbo.Stacks SET ExpID = @ExpID, StackDate = @StackDate, StackTime = @StackTime, Comment = @Comment WHERE StackID = @StackID;", dataStack);
+                        if (countStack == 0) {
+                            // If there was no update, then Stack not yet exists
+                            await dbQueries.executeNonQuery(this._dbConfig, "INSERT INTO dbo.Stacks (StackID, ExpID, StackDate, StackTime, Comment) VALUES (@StackID, @ExpID, @StackDate, @StackTime, @Comment);", dataStack);
+                            new CustomNotice(`New Stack ${data.stackID} added successfully.`, "success-notice");
+                        }
+                        else {
+                            new CustomNotice(`Stack ${data.stackID} updated successfully.`, "success-notice");
+                        }
                     };
 
-                    //this._wasCancelled = false;
+                    this._wasCancelled = false;
+                    this.close();
                 }
-                //await dbQueries.addNewSite(this._dbConfig, this._animalID, result.project, result.location, result.depth);
-                //new CustomNotice(`New site ${currSiteID} added successfully.`, "success-notice");
-
-                //this._missingSiteIDsIndex++;
-                //if (!(this._missingSiteIDsIndex + 1 <= this._missingSitesIDs.length)) {
-                //    this._currentStep++;
-                //}
-                //await this.renderCurrentStep();
             }
             catch(err) {
                 new CustomNotice(err.message, "error-notice");
