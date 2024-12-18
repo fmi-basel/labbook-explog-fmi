@@ -28,6 +28,19 @@ const DEFAULT_SETTINGS: LabBookExpLogSettings = {
 	inputTimeFormat: "HH:mm"
 }
 
+function catchLabBookExpLogPluginErrors(target: any, propertyKey: string, descriptor: PropertyDescriptor): void {
+	const originalMethod = descriptor.value;
+
+	descriptor.value = async function (...args: any[]) {
+		try {
+			await originalMethod.apply(this, args);
+		} catch (error) {
+			console.error(`Error in ${propertyKey}:`, error);
+			new Notice(`An error occurred: ${error.message}`);
+		}
+	};
+}
+
 export default class LabBookExpLogPlugin extends Plugin {
 	_settings: LabBookExpLogSettings;
 	_dbConfig: dbQueries.DBConfig;
@@ -51,10 +64,12 @@ export default class LabBookExpLogPlugin extends Plugin {
 
 	}
 
+	@catchLabBookExpLogPluginErrors
 	async loadSettings() {
 		this._settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
 	}
 
+	@catchLabBookExpLogPluginErrors
 	async saveSettings() {
 		await this.saveData(this._settings);
 		await this.updateDBConfig();
@@ -76,6 +91,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 		}
 	}
 
+	@catchLabBookExpLogPluginErrors
 	async createExpLogTable() {
 		const file = this.app.workspace.getActiveFile();
 		if (!file) {
@@ -112,6 +128,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 		await this.insertTableIntoFile(file, fileContent, newTable);
 	}
 
+	@catchLabBookExpLogPluginErrors
 	async exportExpLogData() {
 		try {
 			const file = this.app.workspace.getActiveFile();

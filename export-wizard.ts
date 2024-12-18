@@ -195,7 +195,22 @@ export class ExportWizardModal extends Modal {
         const currSiteID = this._missingSitesIDs[this._missingSiteIDsIndex];
 
         const { contentEl } = this;
-        new NewSiteWizardPage(contentEl, this._animalID, currSiteID, this._missingSiteIDsIndex, this._missingSitesIDs.length, this._projects, this._locations);
+        const page = new NewSiteWizardPage(contentEl, this._animalID, currSiteID, this._missingSiteIDsIndex, this._missingSitesIDs.length, this._projects, this._locations);
+        page.onSuccess(async (result) => {
+            try {
+                await dbQueries.addNewSite(this._dbConfig, this._animalID, result.project, result.location, result.depth);
+                new CustomNotice(`New site ${currSiteID} added successfully.`, "success-notice");
+
+                this._missingSiteIDsIndex++;
+                if (!(this._missingSiteIDsIndex + 1 <= this._missingSitesIDs.length)) {
+                    this._currentStep++;
+                }
+                await this.renderCurrentStep();
+            }
+            catch(err) {
+                new CustomNotice(err.message, "error-notice");
+            }
+        });
     }
 
     private async renderStepSubmit() {
@@ -238,7 +253,7 @@ class NewSiteWizardPage extends WizardPage {
     private _currentSiteID: number;
     private _currentProjectName: string = "";
     private _currentLocationName: string = "";
-    private _currentDepth: number | null;
+    private _currentDepthString: string = "";
 
     private _projectContainer: HTMLElement;
     private _locationContainer: HTMLElement;
@@ -246,6 +261,7 @@ class NewSiteWizardPage extends WizardPage {
 
     constructor(parentEl: HTMLElement, animalID: string, currentSiteID: number, currentSitesIndex: number, totalSitesCount: number, existingProjects: string[], existingLocations: string[]) {
         super(parentEl, animalID);
+
         this._projects = existingProjects;
         this._locations = existingLocations;
         this._currentSiteID = currentSiteID;
@@ -278,7 +294,7 @@ class NewSiteWizardPage extends WizardPage {
         // Call the parent renderPage to display content and buttons
         this.renderPage(
             [titleEl, descriptionEl, this._projectContainer, this._locationContainer, this._depthContainer], // Content elements
-            currentSitesIndex > 0,  // Show "Back" button
+            false,  // Never show "Back" button for new sites as data is saved when clicking on "Next" (currentSitesIndex > 0)
             true   // Show "Next" button
         );
     }
@@ -432,20 +448,9 @@ class NewSiteWizardPage extends WizardPage {
                 .setDesc("optional")
                 .addText((text) => {
                     text.setPlaceholder("Enter depth...")
-                        .setValue(this._currentDepth != null ? this._currentDepth.toString() : "")
+                        .setValue(this._currentDepthString)
                         .onChange((value) => {
-                            if (value) {
-                                if (utils.isInteger(value)) {
-                                    this._currentDepth = Number(value);
-                                    console.log(`Depth: ${value}`);
-                                }
-                                else {
-                                    new CustomNotice("Please provide valid integer for Depth!", "warning-notice");
-                                }
-                            }
-                            else {
-                                this._currentDepth = null;
-                            }
+                            this._currentDepthString = value;
                         });
                     text.inputEl.classList.add("depth-selection-textbox");
                 });
@@ -453,19 +458,35 @@ class NewSiteWizardPage extends WizardPage {
 
     protected onBack(): void {
         console.log("Back button clicked - Navigate to the previous step.");
+        this.triggerCancelled();
     }
 
-    protected onNext(): void {
+    protected async onNext(): Promise<void> {
         // Validation logic
         if (!this._currentProjectName || !this._currentLocationName) {
             new CustomNotice("Please provide Project and Location!", "warning-notice");
             return;
         }
 
-        //TODO
-
+        let currentDepth: number | null = null;
+        if (this._currentDepthString) {
+            if (utils.isInteger(this._currentDepthString)) {
+                currentDepth = Number(this._currentDepthString);
+                console.log(`Depth: ${currentDepth}`);
+            }
+            else {
+                new CustomNotice("Please provide valid integer for Depth!", "warning-notice");
+                return
+            }
+        }
 
         console.log("Proceeding to the next step...");
         console.log(`Project: ${this._currentProjectName}, Location: ${this._currentLocationName}`);
+
+        this.triggerSuccess({
+            project: this._currentProjectName,
+            location: this._currentLocationName,
+            currentDepth,
+        });
     }
 }

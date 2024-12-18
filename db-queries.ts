@@ -231,3 +231,7 @@ export async function queryLocations(config: DBConfig): Promise<string[]> {
     return locations;
   });
 }
+
+export async function addNewSite(config: DBConfig, animalID: string, project: string, location: string, depth: number | null): Promise<void> {
+
+}

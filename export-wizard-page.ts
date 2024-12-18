@@ -4,11 +4,39 @@ export abstract class WizardPage {
     protected _containerEl: HTMLElement;
     private _backButtonEl: HTMLButtonElement | null = null;
     private _nextButtonEl: HTMLButtonElement | null = null;
-    private _animalID: String;
+    protected _animalID: string;
+
+    private _onSuccess?: (...args: any[]) => void;
+    private _onCancelled?: () => void;
 
     constructor(parentEl: HTMLElement, animalID: string) {
         this._containerEl = parentEl.createDiv({ cls: "wizard-page" });
         this._animalID = animalID;
+    }
+
+    // Setup callbacks
+    onSuccess(callback: (...args: any[]) => void): void {
+        this._onSuccess = callback;
+    }
+
+    onCancelled(callback: () => void): void {
+        this._onCancelled = callback;
+    }
+
+    protected triggerSuccess(...args: any[]): void {
+        if (this._onSuccess) {
+            this._onSuccess(...args);
+        } else {
+            console.warn("No onSuccess handler is set.");
+        }
+    }
+
+    protected triggerCancelled(): void {
+        if (this._onCancelled) {
+            this._onCancelled();
+        } else {
+            console.warn("No onCancelled handler is set.");
+        }
     }
 
     // Initialize the page with specific content and buttons
