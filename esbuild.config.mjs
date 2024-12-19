@@ -74,6 +74,7 @@ const context = await esbuild.context({
 		"node:process",
 		"node:events",
 		"node:stream",
+		"keytar",
 	],
 	format: "cjs",
 	//target: "es2018",

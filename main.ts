@@ -5,6 +5,10 @@ import * as dbQueries from "./db-queries";
 import { ExportData } from "./export-data";
 import { ExportWizardModal } from "./export-wizard";
 import { CustomNotice } from "./custom-notice";
+import * as fs from "fs";
+import * as path from "path";
+
+const SERVICE_NAME_ENCRYPTION = "LabBookExpLogSettings";
 
 interface LabBookExpLogSettings {
 	dbUser: string;
@@ -44,8 +48,31 @@ function catchLabBookExpLogPluginErrors(target: any, propertyKey: string, descri
 export default class LabBookExpLogPlugin extends Plugin {
 	_settings: LabBookExpLogSettings;
 	_dbConfig: dbQueries.DBConfig;
+	_keytar: typeof import("keytar") | null = null;
 
-	async onload() {
+	public async onload() {
+		// Resolve the plugin root directory
+        const vaultBasePath = (this.app.vault.adapter as any).basePath;
+        const pluginRoot = path.join(vaultBasePath, ".obsidian/plugins/labbook-explog-fmi");
+        const keytarPath = path.join(pluginRoot, "node_modules/keytar/build/Release/keytar.node");
+
+        console.log("Vault Base Path:", vaultBasePath);
+        console.log("Plugin Root:", pluginRoot);
+        console.log("Keytar Path:", keytarPath);
+
+        // Load keytar first (used below when loading settings)
+        if (fs.existsSync(keytarPath)) {
+            try {
+                this._keytar = require(keytarPath);
+                console.log("Keytar loaded successfully:", this._keytar);
+            } catch (error) {
+                console.error("Failed to load keytar:", error);
+                this._keytar = null;
+            }
+        } else {
+            console.error("Keytar.node file not found at:", keytarPath);
+        }
+
 		await this.loadSettings();
 		await this.updateDBConfig();
 
@@ -60,18 +87,49 @@ export default class LabBookExpLogPlugin extends Plugin {
 		this.addSettingTab(new LabBookSettingTab(this.app, this));
 	}
 
-	onunload() {
+	public onunload() {
 
 	}
 
+	private async savePassword(username: string, password: string): Promise<void> {
+		await this._keytar!.setPassword(SERVICE_NAME_ENCRYPTION, username, password);
+	}
+	
+	private async getPassword(username: string): Promise<string | null> {
+		return await this._keytar!.getPassword(SERVICE_NAME_ENCRYPTION, username);
+	}
+
 	@catchLabBookExpLogPluginErrors
-	async loadSettings() {
+	private async loadSettings() {
 		this._settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		if (this._keytar && this._settings.dbUser) {
+			const password = await this.getPassword(this._settings.dbUser);
+			if (password) {
+				this._settings.dbPassword = password!;
+			}
+		}
 	}
 
 	@catchLabBookExpLogPluginErrors
-	async saveSettings() {
+	public async saveSettings() {
+		const password = this._settings.dbPassword;
+		if (this._keytar && password) {
+			if (this._settings.dbUser) {
+				// Persist password with keytar for specific user
+				await this.savePassword(this._settings.dbUser, password);
+			}
+			else {
+				new CustomNotice("Database Password has not been saved!\nIt is only persisted together with the Database User.", "warning-notice");
+			}
+			this._settings.dbPassword = ""; // Reset (only persisted by keytar)
+		}
+
 		await this.saveData(this._settings);
+		if (this._keytar && password) {
+			// Keep password in memory only
+			this._settings.dbPassword = password;
+		}
+
 		await this.updateDBConfig();
 	}
 
@@ -92,7 +150,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 	}
 
 	@catchLabBookExpLogPluginErrors
-	async createExpLogTable() {
+	private async createExpLogTable() {
 		const file = this.app.workspace.getActiveFile();
 		if (!file) {
 		  new Notice("No active file to insert the table.");
@@ -129,7 +187,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 	}
 
 	@catchLabBookExpLogPluginErrors
-	async exportExpLogData() {
+	private async exportExpLogData() {
 		try {
 			const file = this.app.workspace.getActiveFile();
 			if (!file) {
@@ -224,7 +282,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 		}
 	}
 
-	async updateYamlMetadata(file: TFile, newMetadata: Record<string, any>): Promise<void> {
+	private async updateYamlMetadata(file: TFile, newMetadata: Record<string, any>): Promise<void> {
 		const content = await this.app.vault.read(file);
 	  
 		// Extract existing YAML front matter
@@ -245,7 +303,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 		await this.app.vault.modify(file, updatedContent);
 	}
 
-	async parseYaml(content: string): Promise<Record<string, any>> {
+	private async parseYaml(content: string): Promise<Record<string, any>> {
 		try {
 		  return yaml.load(content) as Record<string, any>;
 		} catch (err) {
@@ -254,7 +312,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 		}
 	}
 	  
-	async stringifyYaml(data: Record<string, any>): Promise<string> {
+	private async stringifyYaml(data: Record<string, any>): Promise<string> {
 		try {
 		  return yaml.dump(data);
 		} catch (err) {
@@ -263,18 +321,18 @@ export default class LabBookExpLogPlugin extends Plugin {
 		}
 	}
 	
-	matchingTableExist(content: string, headers: string[]): boolean {
+	private matchingTableExist(content: string, headers: string[]): boolean {
 		const headerRegex = new RegExp(
 		  `\\|\\s*${headers.join("\\s*\\|\\s*")}\\s*\\|`
 		);
 		return headerRegex.test(content);
 	}
 	
-	getExpLogTableHeaders(): string[] {
+	private getExpLogTableHeaders(): string[] {
 		return ["Date", "Time", "StackID", "ExpID", "SiteID", "Comment"];
 	}
 	
-	generateTableWithHeaders(headers: string[]): string {
+	private generateTableWithHeaders(headers: string[]): string {
 		const headerRow = `| ${headers.join(" | ")} |`;
 		const separatorRow = `| ${headers.map(() => "---").join(" | ")} |`;
 	  
@@ -284,12 +342,12 @@ export default class LabBookExpLogPlugin extends Plugin {
 		return `${headerRow}\n${separatorRow}\n${blankRow}`;
 	}		  
 	
-	async insertTableIntoFile(file: TFile, content: string, table: string) {
+	private async insertTableIntoFile(file: TFile, content: string, table: string) {
 		const updatedContent = `${content}\n\n${table}`;
 		await this.app.vault.modify(file, updatedContent);
 	}
 
-	async extractExpLogData(): Promise<ExportData[]> {
+	private async extractExpLogData(): Promise<ExportData[]> {
 		const file = this.app.workspace.getActiveFile();
 		if (!file) {
 		  new Notice("No active file.");
@@ -369,7 +427,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 		return[];
 	}
 	  
-	async extractTableData(content: string, headers: string[]): Promise<{ [key: string]: string }[]> {
+	private async extractTableData(content: string, headers: string[]): Promise<{ [key: string]: string }[]> {
 		// Create a regex to match the table headers
 		const headerRegex = new RegExp(
 		  `^\\|\\s*${headers.join("\\s*\\|\\s*")}\\s*(\\|.*)?\\|\\s*$`,
