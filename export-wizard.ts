@@ -215,7 +215,6 @@ export class ExportWizardModal extends Modal {
     }
 
     private async renderStepFinish() {
-        console.log("renderStepFinish"); //debug
         const { contentEl, modalEl } = this;
         modalEl.classList.add("finish-wizard-page");
 
@@ -516,12 +515,12 @@ class NewSiteWizardPage extends WizardPage {
         }
 
         console.log("Proceeding to the next step...");
-        console.log(`Project: ${this._currentProjectName}, Location: ${this._currentLocationName}`);
+        console.log(`Project: ${this._currentProjectName}, Location: ${this._currentLocationName}, Depth: ${currentDepth}`);
 
         this.triggerSuccess({
             project: this._currentProjectName,
             location: this._currentLocationName,
-            currentDepth,
+            depth: currentDepth,
         });
     }
 }
