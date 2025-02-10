@@ -236,9 +236,12 @@ export class ExportWizardModal extends Modal {
                         }
 
                         // Stack
-                        const stackDate = new Date(data.logDateTime!.getFullYear(), data.logDateTime!.getMonth(), data.logDateTime!.getDate());
+                        //Fix timeshift UTC
+                        //const stackDate = new Date(data.logDateTime!.getFullYear(), data.logDateTime!.getMonth(), data.logDateTime!.getDate());
+                        const stackDate = moment(data.logDateTime!).format("YYYY-MM-DD"); // Store as local date string
                         const stackTime = moment(data.logDateTime!).format("HH:mm:ss");
                         const dataStack = { StackID: data.stackID, ExpID: data.expID, StackDate: stackDate, StackTime: stackTime, Comment: data.comment };
+                        
                         const countStack = await dbQueries.executeNonQuery(this._dbConfig, "UPDATE dbo.Stacks SET ExpID = @ExpID, StackDate = @StackDate, StackTime = @StackTime, Comment = @Comment WHERE StackID = @StackID;", dataStack);
                         if (countStack == 0) {
                             // If there was no update, then Stack not yet exists
