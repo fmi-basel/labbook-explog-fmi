@@ -11,6 +11,7 @@ export class ExportData {
     stackID: number | null = null;
     expID: number | null = null;
     siteID: number | null = null;
+    paradigm: string | null = null;
     comment: string | null = null;
 
     constructor(position: number) {
@@ -23,6 +24,7 @@ export class ExportData {
         !this.stackID &&
         !this.expID &&
         !this.siteID &&
+        !this.paradigm &&
         !this.comment
       );
     }

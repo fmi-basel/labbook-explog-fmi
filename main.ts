@@ -172,17 +172,27 @@ export default class LabBookExpLogPlugin extends Plugin {
 
 		// Define table headers
 		const headers = this.getExpLogTableHeaders();
+		const headersV2 = this.getExpLogTableHeadersV2();
 
 		const fileContent = await this.app.vault.read(file);
 
-		// Check if any matching table already exists
-		if (this.matchingTableExist(fileContent, headers)) {
+		// Check if any matching table already exists (with headersV2)
+		if (this.matchingTableExist(fileContent, headersV2)) {
 			new Notice("A table with matching headers already exists in this file.");
+			return;
+		}
+
+		// There might be table with "old" headers (missing Paradigm)
+		if (this.matchingTableExist(fileContent, headers)) {
+			// Adapt the table to include the missing "Paradigm" column
+			const updatedContent = this.adaptTable(fileContent, headers, headersV2);
+			await this.app.vault.modify(file, updatedContent);
+			new Notice("Existing table updated to match new schema (with Paradigm).");
 			return;
 		}
 	  
 		// Create and insert the table
-		const newTable = this.generateTableWithHeaders(headers);
+		const newTable = this.generateTableWithHeaders(headersV2);
 		await this.insertTableIntoFile(file, fileContent, newTable);
 	}
 
@@ -331,6 +341,10 @@ export default class LabBookExpLogPlugin extends Plugin {
 	private getExpLogTableHeaders(): string[] {
 		return ["Date", "Time", "StackID", "ExpID", "SiteID", "Comment"];
 	}
+
+	private getExpLogTableHeadersV2(): string[] { 
+		return ["Date", "Time", "StackID", "ExpID", "SiteID", "Paradigm", "Comment"]; 
+	}
 	
 	private generateTableWithHeaders(headers: string[]): string {
 		const headerRow = `| ${headers.join(" | ")} |`;
@@ -340,7 +354,66 @@ export default class LabBookExpLogPlugin extends Plugin {
 		const blankRow = `| ${headers.map(() => " ").join(" | ")} |`;
 	  
 		return `${headerRow}\n${separatorRow}\n${blankRow}`;
-	}		  
+	}
+	
+	private adaptTable(content: string, headersOld: string[], headersNew: string[]): string {
+		const lines = content.split("\n");
+	
+		// Step 1: Find the header row that matches headersOld
+		const headerRegex = new RegExp(`\\|\\s*${headersOld.join("\\s*\\|\\s*")}\\s*\\|`);
+		let headerIndex = lines.findIndex(line => headerRegex.test(line));
+		if (headerIndex === -1) return content; // No matching table found
+	
+		// Step 2: Compute the new column order and mapping
+		let newHeaderOrder: string[] = [];
+		let columnMapping: Map<number, number> = new Map(); // Old column index → New index
+	
+		let oldColIdx = 0, newColIdx = 0;
+		while (newColIdx < headersNew.length) {
+			if (oldColIdx < headersOld.length && headersOld[oldColIdx] === headersNew[newColIdx]) {
+				columnMapping.set(oldColIdx, newColIdx); // Keep existing columns mapped
+				newHeaderOrder.push(headersOld[oldColIdx]);
+				oldColIdx++;
+			} else {
+				// This is a new column being inserted
+				newHeaderOrder.push(headersNew[newColIdx]);
+			}
+			newColIdx++;
+		}
+	
+		// Step 3: Replace the header row and separator row
+		lines[headerIndex] = `| ${newHeaderOrder.join(" | ")} |`;
+		if (lines.length > headerIndex + 1) {
+			lines[headerIndex + 1] = `| ${newHeaderOrder.map(() => "---").join(" | ")} |`;
+		}
+	
+		// Step 4: Update each row, ensuring existing values stay in their correct columns
+		for (let i = headerIndex + 2; i < lines.length; i++) {
+			// Skip lines that don't look like table rows
+			if (!lines[i].trim().startsWith("|") || !lines[i].trim().endsWith("|")) {
+				continue;
+			}
+	
+			// Strip off leading/trailing bars and trim cells
+			let oldCells = lines[i].trim().split("|").slice(1, -1).map(cell => cell.trim());
+			if (oldCells.length !== headersOld.length) {
+				// If malformed or doesn't match old header count, skip or handle differently
+				continue;
+			}
+	
+			// Create a new row with empty placeholders for the new columns
+			let newRow = new Array(newHeaderOrder.length).fill("");
+	
+			// Move data from old columns to new columns
+			columnMapping.forEach((newIndex, oldIndex) => {
+				newRow[newIndex] = oldCells[oldIndex];
+			});
+	
+			lines[i] = `| ${newRow.join(" | ")} |`;
+		}
+	
+		return lines.join("\n");
+	}
 	
 	private async insertTableIntoFile(file: TFile, content: string, table: string) {
 		const updatedContent = `${content}\n\n${table}`;
@@ -354,7 +427,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 		  return[];
 		}
 
-		const headers = this.getExpLogTableHeaders();
+		const headers = this.getExpLogTableHeadersV2();
 		const fileContent = await this.app.vault.read(file);
 
 		let spinner = null;
@@ -378,6 +451,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 					data.origStringStackID = row["StackID"];
 					data.origStringExpID = row["ExpID"];
 					data.origStringSiteID = row["SiteID"];
+					data.paradigm = row["Paradigm"];
 					data.comment = row["Comment"];
 
 					if (data.origStringLogDate && data.origStringLogTime) {
@@ -426,27 +500,28 @@ export default class LabBookExpLogPlugin extends Plugin {
 
 		return[];
 	}
-	  
+	
 	private async extractTableData(content: string, headers: string[]): Promise<{ [key: string]: string }[]> {
 		// Create a regex to match the table headers
 		const headerRegex = new RegExp(
 		  `^\\|\\s*${headers.join("\\s*\\|\\s*")}\\s*(\\|.*)?\\|\\s*$`,
 		  "m"
 		);
-	  
+
 		// Find the header row in the content
 		const headerMatch = content.match(headerRegex);
 		if (!headerMatch) {
+		  new CustomNotice("A table with matching headers cannot be found.\n\nPlease add ExpLog table (existing table with older headers will be automatically updated).", "error-notice");
 		  return []; // No matching header found
 		}
-	  
+
 		// Find the position of the matching header
 		const headerLine = headerMatch.index!;
 		const tableContent = content.substring(headerLine);
-	  
+
 		// Split the table into lines
 		const lines = tableContent.split("\n");
-	  
+
 		// Verify the second line is the separator (e.g., | --- | --- |)
 		const separatorRegex = new RegExp(
 		  `^\\|\\s*${headers.map(() => "-+").join("\\s*\\|\\s*")}\\s*(\\|.*)?\\|\\s*$`
@@ -454,7 +529,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 		if (!separatorRegex.test(lines[1])) {
 		  return []; // No valid table separator found
 		}
-	  
+
 		// Extract rows below the header and separator
 		const dataRows: { [key: string]: string }[] = [];
 		for (let i = 2; i < lines.length; i++) {
@@ -462,24 +537,24 @@ export default class LabBookExpLogPlugin extends Plugin {
 		  if (!row || !row.startsWith("|") || !row.endsWith("|")) {
 			break; // Stop when no more valid table rows are found
 		  }
-	  
+
 		  // Split the row into cells
 		  const cells = row.split("|").map((cell) => cell.trim());
-	  
+
 		  // Ensure that there are at least as many cells as the number of headers
 		  if (cells.length - 2 < headers.length) {
 			continue;
 		  }
-	  
+
 		  // Map only the cells corresponding to the headers
 		  const rowData: { [key: string]: string } = {};
 		  headers.forEach((header, index) => {
 			rowData[header] = cells[index + 1] || ""; // Use an empty string if the cell is missing
 		  });
-	  
+
 		  dataRows.push(rowData);
 		}
-	  
+
 		return dataRows;
 	}
 

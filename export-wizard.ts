@@ -240,12 +240,12 @@ export class ExportWizardModal extends Modal {
                         //const stackDate = new Date(data.logDateTime!.getFullYear(), data.logDateTime!.getMonth(), data.logDateTime!.getDate());
                         const stackDate = moment(data.logDateTime!).format("YYYY-MM-DD"); // Store as local date string
                         const stackTime = moment(data.logDateTime!).format("HH:mm:ss");
-                        const dataStack = { StackID: data.stackID, ExpID: data.expID, StackDate: stackDate, StackTime: stackTime, Comment: data.comment };
+                        const dataStack = { StackID: data.stackID, ExpID: data.expID, StackDate: stackDate, StackTime: stackTime, Paradigm: data.paradigm, Comment: data.comment };
                         
-                        const countStack = await dbQueries.executeNonQuery(this._dbConfig, "UPDATE dbo.Stacks SET ExpID = @ExpID, StackDate = @StackDate, StackTime = @StackTime, Comment = @Comment WHERE StackID = @StackID;", dataStack);
+                        const countStack = await dbQueries.executeNonQuery(this._dbConfig, "UPDATE dbo.Stacks SET ExpID = @ExpID, StackDate = @StackDate, StackTime = @StackTime, Paradigm = @Paradigm, Comment = @Comment WHERE StackID = @StackID;", dataStack);
                         if (countStack == 0) {
                             // If there was no update, then Stack not yet exists
-                            await dbQueries.executeNonQuery(this._dbConfig, "INSERT INTO dbo.Stacks (StackID, ExpID, StackDate, StackTime, Comment) VALUES (@StackID, @ExpID, @StackDate, @StackTime, @Comment);", dataStack);
+                            await dbQueries.executeNonQuery(this._dbConfig, "INSERT INTO dbo.Stacks (StackID, ExpID, StackDate, StackTime, Paradigm, Comment) VALUES (@StackID, @ExpID, @StackDate, @StackTime, @Paradigm, @Comment);", dataStack);
                             new CustomNotice(`New Stack ${data.stackID} added successfully.`, "success-notice");
                         }
                         else {
