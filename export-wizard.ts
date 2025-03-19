@@ -221,6 +221,10 @@ export class ExportWizardModal extends Modal {
         const page = new FinishWizardPage(contentEl, this._animalID, this._exportData);
         page.onSuccess(async (result) => {
             try {
+                let countInsExp : number = 0;
+                let countUpdExp : number = 0;
+                let countInsStack : number = 0;
+                let countUpdStack : number = 0;
                 if (this._exportData && this._exportData.length > 0) {
                     for (const data of this._exportData) {
                         // Experiment
@@ -229,10 +233,12 @@ export class ExportWizardModal extends Modal {
                         if (countExp == 0) {
                             // If there was no update, then Experiment not yet exists
                             await dbQueries.executeNonQuery(this._dbConfig, "INSERT INTO dbo.Experiments (ExpID, SiteID) VALUES (@ExpID, @SiteID);", dataExp);
-                            new CustomNotice(`New Experiment ${data.expID} added successfully.`, "success-notice");
+                            //new CustomNotice(`New Experiment ${data.expID} added successfully.`, "success-notice");
+                            countInsExp++;
                         }
                         else {
-                            new CustomNotice(`Experiment ${data.expID} updated successfully.`, "success-notice");
+                            //new CustomNotice(`Experiment ${data.expID} updated successfully.`, "success-notice");
+                            countUpdExp++;
                         }
 
                         // Stack
@@ -246,15 +252,31 @@ export class ExportWizardModal extends Modal {
                         if (countStack == 0) {
                             // If there was no update, then Stack not yet exists
                             await dbQueries.executeNonQuery(this._dbConfig, "INSERT INTO dbo.Stacks (StackID, ExpID, StackDate, StackTime, Paradigm, Comment) VALUES (@StackID, @ExpID, @StackDate, @StackTime, @Paradigm, @Comment);", dataStack);
-                            new CustomNotice(`New Stack ${data.stackID} added successfully.`, "success-notice");
+                            //new CustomNotice(`New Stack ${data.stackID} added successfully.`, "success-notice");
+                            countInsStack++;
                         }
                         else {
-                            new CustomNotice(`Stack ${data.stackID} updated successfully.`, "success-notice");
+                            //new CustomNotice(`Stack ${data.stackID} updated successfully.`, "success-notice");
+                            countUpdStack++;
                         }
                     };
 
                     this._wasCancelled = false;
                     this.close();
+                }
+
+                if (countInsExp + countUpdExp === 0) {
+                    new CustomNotice(`Experiments: Ins=0, Upd=0`, "warning-notice");
+                }
+                else {
+                    new CustomNotice(`Experiments: Ins=${countInsExp}, Upd=${countUpdExp}`, "success-notice");
+                }
+
+                if (countInsStack + countUpdStack === 0) {
+                    new CustomNotice(`Stacks: Ins=0, Upd=0`, "warning-notice");
+                }
+                else {
+                    new CustomNotice(`Stacks: Ins=${countInsStack}, Upd=${countUpdStack}`, "success-notice");
                 }
             }
             catch(err) {

@@ -1,6 +1,6 @@
 {
 	"name": "labbook-explog-fmi",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"description": "Experimental data collection and export to ExpLog database.",
 	"main": "main.js",
 	"scripts": {
