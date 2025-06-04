@@ -1,9 +1,12 @@
 import * as sql from "mssql";
+import { Pool as Pg, type PoolConfig as PgPoolConfig, type QueryResult as PgQueryResult } from "pg";
 
 export interface DBConfig {
+    dbType: "mssql" | "postgres";
     user: string;
     password: string;
     server: string;
+    port?: number;
     database: string;
     encrypt: boolean;
     trustServerCertificate: boolean;

@@ -1,0 +1,5 @@
+CREATE TABLE public.pis (
+    pi VARCHAR(255) NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    CONSTRAINT pk_pis PRIMARY KEY (pi)
+);

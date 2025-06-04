@@ -11,20 +11,29 @@ import * as path from "path";
 const SERVICE_NAME_ENCRYPTION = "LabBookExpLogSettings";
 
 interface LabBookExpLogSettings {
+	// Basic DB settings
+	dbType: "mssql" | "postgres";
 	dbUser: string;
   	dbPassword: string;
   	dbServer: string;
+	dbPort?: number;
   	dbName: string;
-	dbEncrypt: boolean;
-	dbTrustServerCertificate: boolean;
+
+	// Security DB settings
+	dbEncrypt: boolean; // mssql: encrypt; pg: ssl: true/false
+	dbTrustServerCertificate: boolean; // mssql: trustServerCert; pg: ssl.rejectUnauthorized = !this
+
+	// Input formats
 	inputDateFormat: string;
 	inputTimeFormat: string;
 }
 
 const DEFAULT_SETTINGS: LabBookExpLogSettings = {
+	dbType: "mssql",
 	dbUser: '',
   	dbPassword: '',
   	dbServer: 'localhost',
+	dbPort: undefined,
   	dbName: 'ExpLog',
 	dbEncrypt: false,
 	dbTrustServerCertificate: true,
@@ -101,11 +110,14 @@ export default class LabBookExpLogPlugin extends Plugin {
 
 	@catchLabBookExpLogPluginErrors
 	private async loadSettings() {
-		this._settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		// Improved by casting and better null handling (might be undefined/null)
+		//this._settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		const loaded = (await this.loadData()) as Partial<LabBookExpLogSettings> || {};
+		this._settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
 		if (this._keytar && this._settings.dbUser) {
 			const password = await this.getPassword(this._settings.dbUser);
 			if (password) {
-				this._settings.dbPassword = password!;
+				this._settings.dbPassword = password;
 			}
 		}
 	}
@@ -135,15 +147,17 @@ export default class LabBookExpLogPlugin extends Plugin {
 
 	private async updateDBConfig() {
 		this._dbConfig = {
+		  dbType: this._settings.dbType,
 		  user: this._settings.dbUser || "",
 		  password: this._settings.dbPassword || "",
 		  server: this._settings.dbServer || "",
+		  port: this._settings.dbPort || undefined,
 		  database: this._settings.dbName || "",
 		  encrypt: this._settings.dbEncrypt ?? true,
 		  trustServerCertificate: this._settings.dbTrustServerCertificate ?? true,
 		};
 	
-		// Optional: Validate the configuration
+		// Validate the configuration
 		if (!this._dbConfig.user || !this._dbConfig.password || !this._dbConfig.server) {
 			new Notice("DB Config is incomplete. Ensure all required settings are provided.");
 		}
@@ -701,6 +715,19 @@ class LabBookSettingTab extends PluginSettingTab {
 		containerEl.createEl('h2', { text: 'Database Settings' });
 
 		new Setting(containerEl)
+			.setName("Database Type")
+			.addDropdown((dropdown) => {
+				dropdown
+				.addOption("mssql", "MSSQL")
+				.addOption("postgres", "PostgreSQL")
+				.setValue(this._plugin._settings.dbType)
+				.onChange(async (value) => {
+					this._plugin._settings.dbType = value as "mssql" | "postgres";
+					await this._plugin.saveSettings();
+				});
+		});
+
+		new Setting(containerEl)
 			.setName('Database Server')
 			.addText(text => text
 				.setPlaceholder('localhost')
@@ -711,13 +738,32 @@ class LabBookSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
+			.setName("Port (optional)")
+			.setDesc("Leave blank to use the default (1433 for MSSQL, 5432 for PostgreSQL)")
+			.addText(text => {
+				text
+				//.setPlaceholder("1433")
+				.setValue(this._plugin._settings.dbPort?.toString() ?? "")
+				.onChange(async (value) => {
+					// If blank or non‐numeric, treat as undefined
+					const num = parseInt(value.trim(), 10);
+					this._plugin._settings.dbPort = isNaN(num) || num <= 0 ? undefined : num;
+					await this._plugin.saveSettings();
+
+					if(value && (isNaN(num) || num <= 0)) {
+						new Notice("Port has been reset - not a valid number.");
+					}
+				});
+			});
+
+		new Setting(containerEl)
 			.setName('Database Name')
 			.addText(text => text
 				.setPlaceholder('ExpLog')
 				.setValue(this._plugin._settings.dbName)
 				.onChange(async (value) => {
-				this._plugin._settings.dbName = value;
-				await this._plugin.saveSettings();
+					this._plugin._settings.dbName = value;
+					await this._plugin.saveSettings();
 				}));
 
 		new Setting(containerEl)
@@ -726,8 +772,8 @@ class LabBookSettingTab extends PluginSettingTab {
 				.setPlaceholder('dbuser')
 				.setValue(this._plugin._settings.dbUser)
 				.onChange(async (value) => {
-				this._plugin._settings.dbUser = value;
-				await this._plugin.saveSettings();
+					this._plugin._settings.dbUser = value;
+					await this._plugin.saveSettings();
 				}));
 
 		new Setting(containerEl)
@@ -746,21 +792,21 @@ class LabBookSettingTab extends PluginSettingTab {
 			});
 
 		new Setting(containerEl)
-			.setName('Encrypt')
+			.setName('Encrypt (SSL)')
 			.addToggle(text => text
 				.setValue(this._plugin._settings.dbEncrypt)
 				.onChange(async (value) => {
-				this._plugin._settings.dbEncrypt = value;
-				await this._plugin.saveSettings();
+					this._plugin._settings.dbEncrypt = value;
+					await this._plugin.saveSettings();
 				}));
 
 		new Setting(containerEl)
-			.setName('Trust Server Certificate')
+			.setName('Trust Server Certificate (Skip Validation)')
 			.addToggle(text => text
 				.setValue(this._plugin._settings.dbTrustServerCertificate)
 				.onChange(async (value) => {
-				this._plugin._settings.dbTrustServerCertificate = value;
-				await this._plugin.saveSettings();
+					this._plugin._settings.dbTrustServerCertificate = value;
+					await this._plugin.saveSettings();
 				}));
 
 		containerEl.createEl('h2', { text: 'Other Settings' });
@@ -771,8 +817,8 @@ class LabBookSettingTab extends PluginSettingTab {
 				.setPlaceholder('YYYY-MM-DD')
 				.setValue(this._plugin._settings.inputDateFormat)
 				.onChange(async (value) => {
-				this._plugin._settings.inputDateFormat = value;
-				await this._plugin.saveSettings();
+					this._plugin._settings.inputDateFormat = value;
+					await this._plugin.saveSettings();
 				}));
 
 		new Setting(containerEl)
@@ -781,8 +827,8 @@ class LabBookSettingTab extends PluginSettingTab {
 			.setPlaceholder('HH:mm')
 			.setValue(this._plugin._settings.inputTimeFormat)
 			.onChange(async (value) => {
-			this._plugin._settings.inputTimeFormat = value;
-			await this._plugin.saveSettings();
+				this._plugin._settings.inputTimeFormat = value;
+				await this._plugin.saveSettings();
 			}));
 	}
 }
