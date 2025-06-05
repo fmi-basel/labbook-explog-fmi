@@ -444,26 +444,24 @@ export async function queryProjects(config: DBConfig): Promise<string[]> {
     return withMSSqlDatabase(config, async (pool) => {
       const result = await pool.request()
           .query(`
-              SELECT DISTINCT Project FROM Sites
-              WHERE DataDeleted = 0
-              ORDER BY Project ASC;
+              SELECT ProjectID FROM Projects
+              ORDER BY ProjectID ASC;
           `);
 
-      const projects = result.recordset.map((row) => row.Project as string);
+      const projects = result.recordset.map((row) => row.ProjectID as string);
       return projects;
     });
   }
   else {
     const query = `
-      SELECT DISTINCT project FROM Sites
-      WHERE DataDeleted = false
-      ORDER BY Project ASC;
+      SELECT projectid FROM Projects
+      ORDER BY ProjectID ASC;
     `;
 
     return withPostgresDatabase(config, async (pool) => {
       const result = await pool.query(query);
 
-      const projects = result.rows.map((row) => row.project as string);
+      const projects = result.rows.map((row) => row.projectid as string);
       return projects;
     });
   }

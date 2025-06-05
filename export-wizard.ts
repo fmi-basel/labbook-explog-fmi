@@ -229,10 +229,10 @@ export class ExportWizardModal extends Modal {
                     for (const data of this._exportData) {
                         // Experiment
                         const dataExp = { ExpID: data.expID, SiteID: data.siteID };
-                        const countExp = await dbQueries.executeNonQuery(this._dbConfig, "UPDATE dbo.Experiments SET SiteID = @SiteID WHERE ExpID = @ExpID;", dataExp);
+                        const countExp = await dbQueries.executeNonQuery(this._dbConfig, "UPDATE Experiments SET SiteID = @SiteID WHERE ExpID = @ExpID;", dataExp);
                         if (countExp == 0) {
                             // If there was no update, then Experiment not yet exists
-                            await dbQueries.executeNonQuery(this._dbConfig, "INSERT INTO dbo.Experiments (ExpID, SiteID) VALUES (@ExpID, @SiteID);", dataExp);
+                            await dbQueries.executeNonQuery(this._dbConfig, "INSERT INTO Experiments (ExpID, SiteID) VALUES (@ExpID, @SiteID);", dataExp);
                             //new CustomNotice(`New Experiment ${data.expID} added successfully.`, "success-notice");
                             countInsExp++;
                         }
@@ -248,10 +248,10 @@ export class ExportWizardModal extends Modal {
                         const stackTime = moment(data.logDateTime!).format("HH:mm:ss");
                         const dataStack = { StackID: data.stackID, ExpID: data.expID, StackDate: stackDate, StackTime: stackTime, Paradigm: data.paradigm, Comment: data.comment };
                         
-                        const countStack = await dbQueries.executeNonQuery(this._dbConfig, "UPDATE dbo.Stacks SET ExpID = @ExpID, StackDate = @StackDate, StackTime = @StackTime, Paradigm = @Paradigm, Comment = @Comment WHERE StackID = @StackID;", dataStack);
+                        const countStack = await dbQueries.executeNonQuery(this._dbConfig, "UPDATE Stacks SET ExpID = @ExpID, StackDate = @StackDate, StackTime = @StackTime, Paradigm = @Paradigm, Comment = @Comment WHERE StackID = @StackID;", dataStack);
                         if (countStack == 0) {
                             // If there was no update, then Stack not yet exists
-                            await dbQueries.executeNonQuery(this._dbConfig, "INSERT INTO dbo.Stacks (StackID, ExpID, StackDate, StackTime, Paradigm, Comment) VALUES (@StackID, @ExpID, @StackDate, @StackTime, @Paradigm, @Comment);", dataStack);
+                            await dbQueries.executeNonQuery(this._dbConfig, "INSERT INTO Stacks (StackID, ExpID, StackDate, StackTime, Paradigm, Comment) VALUES (@StackID, @ExpID, @StackDate, @StackTime, @Paradigm, @Comment);", dataStack);
                             //new CustomNotice(`New Stack ${data.stackID} added successfully.`, "success-notice");
                             countInsStack++;
                         }
@@ -372,7 +372,7 @@ class NewSiteWizardPage extends WizardPage {
         // Add dropdown options
         const options = [
             { value: "existing", label: "Existing" },
-            { value: "new", label: "New" },
+            //{ value: "new", label: "New" }, // only allow existing
         ];
 
         options.forEach((option) => {
