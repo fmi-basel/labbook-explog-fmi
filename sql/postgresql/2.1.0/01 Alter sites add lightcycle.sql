@@ -1,0 +1,2 @@
+ALTER TABLE public.sites
+ADD COLUMN lightcycle VARCHAR(100) NULL;

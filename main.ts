@@ -26,6 +26,9 @@ interface LabBookExpLogSettings {
 	// Input formats
 	inputDateFormat: string;
 	inputTimeFormat: string;
+
+	// Other
+	defaultLightCycle: string;
 }
 
 const DEFAULT_SETTINGS: LabBookExpLogSettings = {
@@ -38,7 +41,8 @@ const DEFAULT_SETTINGS: LabBookExpLogSettings = {
 	dbEncrypt: false,
 	dbTrustServerCertificate: true,
 	inputDateFormat: "YYYY-MM-DD",
-	inputTimeFormat: "HH:mm"
+	inputTimeFormat: "HH:mm",
+	defaultLightCycle: "8:00 – 20:00 CET"
 }
 
 function catchLabBookExpLogPluginErrors(target: any, propertyKey: string, descriptor: PropertyDescriptor): void {
@@ -290,7 +294,7 @@ export default class LabBookExpLogPlugin extends Plugin {
 
 			console.log(`Actual ExportData: ${actualExportData}`);
 
-			const exportModal = new ExportWizardModal(this.app, this._dbConfig, animalID, actualExportData);
+			const exportModal = new ExportWizardModal(this.app, this._dbConfig, this._settings.defaultLightCycle, animalID, actualExportData); //TODO
 			const errorResult = await exportModal.openWithPromise();
 			if (!errorResult) {
 				new CustomNotice(`Data for '${animalID}' has been exported successfully.`, "success-notice");
@@ -830,5 +834,15 @@ class LabBookSettingTab extends PluginSettingTab {
 				this._plugin._settings.inputTimeFormat = value;
 				await this._plugin.saveSettings();
 			}));
+
+		new Setting(containerEl)
+			.setName('Default Light Cycle')
+			.addText(text => text
+				.setPlaceholder('8:00 – 20:00 CET')
+				.setValue(this._plugin._settings.defaultLightCycle)
+				.onChange(async (value) => {
+				this._plugin._settings.defaultLightCycle = value;
+				await this._plugin.saveSettings();
+				}));
 	}
 }

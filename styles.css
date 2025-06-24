@@ -37,7 +37,7 @@
 
 .export-wizard-modal {
   width: 450px;
-  height: 600px;
+  height: 750px;
   display: flex;
   flex-direction: column; /* Ensure vertical stacking */
   box-sizing: border-box;
@@ -113,12 +113,14 @@
 }
 
 .project-type-container,
-.location-type-container {
+.location-type-container,
+.lightcycle-type-container {
   margin-bottom: 10px; /* Spacing below the dropdown */
 }
 
 .project-type-dropdown,
-.location-type-dropdown {
+.location-type-dropdown,
+.lightcycle-type-dropdown {
   width: 100px; /* Fixed width */
   padding: 4px 8px;
   border: 1px solid var(--background-modifier-border); /* Obsidian's border color */
@@ -132,7 +134,8 @@
 }
 
 .project-type-dropdown:focus,
-.location-type-dropdown:focus {
+.location-type-dropdown:focus,
+.lightcycle-type-dropdown:focus {
   outline: none;
   border-color: var(--interactive-accent); /* Highlight border on focus */
   box-shadow: 0 0 0 2px var(--background-modifier-border-focus); /* Subtle shadow */
@@ -142,6 +145,8 @@
 .project-selection-textbox,
 .location-selection-dropdown,
 .location-selection-textbox,
+.lightcycle-selection-dropdown,
+.lightcycle-selection-textbox,
 .depth-selection-textbox {
   width: 150px !important;
 }

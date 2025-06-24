@@ -13,16 +13,20 @@ export class ExportWizardModal extends Modal {
     private _wasCancelled: boolean = true; // Tracks if the modal was cancelled
 
     private _currentStep: number = 0;
+
+    private _defaultLightCycle: string;
     private _animalID: string;
     private _exportData: ExportData[] = [];
     private _missingSitesIDs: number[] = [];
     private _missingSiteIDsIndex: number = 0;
     private _projects: string[] = [];
     private _locations: string[] = [];
+    private _lightCycles: string[] = [];
 
-    constructor(app: App, dbConfig: dbQueries.DBConfig, animalID: string, exportData: ExportData[]) {
+    constructor(app: App, dbConfig: dbQueries.DBConfig, defaultLightCycle: string, animalID: string, exportData: ExportData[]) {
         super(app);
         this._dbConfig = dbConfig;
+        this._defaultLightCycle = defaultLightCycle;
         this._animalID = animalID;
         this._exportData = exportData;
     }
@@ -191,15 +195,19 @@ export class ExportWizardModal extends Modal {
         if (this._locations.length == 0) {
             this._locations = await dbQueries.queryLocations(this._dbConfig);
         }
+        if (this._lightCycles.length == 0) {
+            this._lightCycles = await dbQueries.queryLightCycles(this._dbConfig);
+        }
 
         // Get the current site (based on _missingSiteIDsIndex)
         const currSiteID = this._missingSitesIDs[this._missingSiteIDsIndex];
 
         const { contentEl } = this;
-        const page = new NewSiteWizardPage(contentEl, this._animalID, currSiteID, this._missingSiteIDsIndex, this._missingSitesIDs.length, this._projects, this._locations);
+        const page = new NewSiteWizardPage(contentEl, this._animalID, currSiteID, this._missingSiteIDsIndex,
+            this._missingSitesIDs.length, this._projects, this._locations, this._lightCycles, this._defaultLightCycle);
         page.onSuccess(async (result) => {
             try {
-                await dbQueries.addNewSite(this._dbConfig, currSiteID, this._animalID, result.project, result.location, result.depth);
+                await dbQueries.addNewSite(this._dbConfig, currSiteID, this._animalID, result.project, result.location, result.depth, result.lightCycle);
                 new CustomNotice(`New Site ${currSiteID} added successfully.`, "success-notice");
 
                 this._missingSiteIDsIndex++;
@@ -306,24 +314,36 @@ export class ExportWizardModal extends Modal {
 class NewSiteWizardPage extends WizardPage {
     private _projectType: string = "existing";
     private _locationType: string = "existing";
+    private _lightCycleType: string = "existing";
+
     private _projects: string[] = [];
     private _locations: string[] = [];
+    private _lightCycles: string[] = [];
 
     private _currentSiteID: number;
     private _currentProjectName: string = "";
     private _currentLocationName: string = "";
+    private _currentLightCycle: string = "";
+    private _defaultLightCycle: string = ""; // Provided by settings
     private _currentDepthString: string = "";
 
     private _projectContainer: HTMLElement;
     private _locationContainer: HTMLElement;
+    private _lightCycleContainer: HTMLElement;
     private _depthContainer: HTMLElement;
 
-    constructor(parentEl: HTMLElement, animalID: string, currentSiteID: number, currentSitesIndex: number, totalSitesCount: number, existingProjects: string[], existingLocations: string[]) {
+    constructor(parentEl: HTMLElement, animalID: string, currentSiteID: number, currentSitesIndex: number, totalSitesCount: number,
+        existingProjects: string[], existingLocations: string[], existingLightCycles: string[], defaultLightCycle: string) {
         super(parentEl, animalID);
 
         this._projects = existingProjects;
         this._locations = existingLocations;
+        this._lightCycles = existingLightCycles;
         this._currentSiteID = currentSiteID;
+        this._defaultLightCycle = defaultLightCycle;
+        if (this._defaultLightCycle) {
+            this._currentLightCycle = this._defaultLightCycle; // Always initiate with default value
+        }
 
         this.renderPageContent(currentSitesIndex, totalSitesCount);
     }
@@ -335,7 +355,7 @@ class NewSiteWizardPage extends WizardPage {
         const titleEl = containerEl.createEl("h3", { text: `Create New Site: ${this._currentSiteID}` });
         titleEl.classList.add("export-wizard-title");
         const descriptionEl = containerEl.createEl("p", {
-            text: `Step ${currentSitesIndex + 1} of ${totalSitesCount} - Please provide project and location details.`,
+            text: `Step ${currentSitesIndex + 1} of ${totalSitesCount} - Please provide project, location and light cycle details.`,
         });
 
         // Project Section
@@ -350,9 +370,13 @@ class NewSiteWizardPage extends WizardPage {
         this._depthContainer = containerEl.createDiv({ cls: "depth-container" });
         this.renderDepthSection();
 
+        // Light Cycle Section
+        this._lightCycleContainer = containerEl.createDiv({ cls: "lightcycle-container" });
+        this.renderLightCycleSection();
+
         // Call the parent renderPage to display content and buttons
         this.renderPage(
-            [titleEl, descriptionEl, this._projectContainer, this._locationContainer, this._depthContainer], // Content elements
+            [titleEl, descriptionEl, this._projectContainer, this._locationContainer, this._depthContainer, this._lightCycleContainer], // Content elements
             false,  // Never show "Back" button for new sites as data is saved when clicking on "Next" (currentSitesIndex > 0)
             true   // Show "Next" button
         );
@@ -498,11 +522,18 @@ class NewSiteWizardPage extends WizardPage {
         }
     }
 
+    // Render Depth Section
     private renderDepthSection() {
         this._depthContainer.empty(); // Clear previous content
         this._depthContainer.createEl("h4", { text: "Depth" });
+        
+        let inputContainer = this._depthContainer.querySelector(".depth-inputs") as HTMLElement;
+        if (!inputContainer) {
+            inputContainer = this._depthContainer.createDiv({ cls: "depth-inputs" });
+        }
+        inputContainer.empty(); // Clear previous inputs
 
-        new Setting(this._depthContainer)
+        new Setting(inputContainer)
                 .setName("Depth")
                 .setDesc("optional")
                 .addText((text) => {
@@ -515,6 +546,76 @@ class NewSiteWizardPage extends WizardPage {
                 });
     }
 
+    // Render LightCycle Section
+    private renderLightCycleSection() {
+        this._lightCycleContainer.empty(); // Clear previous content
+        this._lightCycleContainer.createEl("h4", { text: "Light Cycle" });
+
+        // Create a container for the dropdown
+        const dropdownContainer = this._lightCycleContainer.createDiv({ cls: "lightcycle-type-container" });
+
+        // Create the dropdown element
+        const dropdown = dropdownContainer.createEl("select", { cls: "lightcycle-type-dropdown" });
+
+        // Add dropdown options
+        const options = [
+            { value: "existing", label: "Existing" },
+            { value: "new", label: "New" },
+        ];
+
+        options.forEach((option) => {
+            const opt = dropdown.createEl("option", { text: option.label, value: option.value });
+            if (option.value === this._lightCycleType) {
+                opt.selected = true;
+            }
+        });
+
+        // Handle dropdown change
+        dropdown.addEventListener("change", (event: Event) => {
+            const target = event.target as HTMLSelectElement;
+            this._lightCycleType = target.value;
+            console.log(`Light Cycle type selected: ${this._lightCycleType}`);
+            this.renderLightCycleInputs(); // Re-render inputs below
+        });
+
+        this.renderLightCycleInputs();
+    }
+
+    private renderLightCycleInputs() {
+        let inputContainer = this._lightCycleContainer.querySelector(".lightcycle-inputs") as HTMLElement;
+        if (!inputContainer) {
+            inputContainer = this._lightCycleContainer.createDiv({ cls: "lightcycle-inputs" });
+        }
+        inputContainer.empty(); // Clear previous inputs
+    
+        if (this._lightCycleType === "existing") {
+            new Setting(inputContainer)
+                .setName("Select Existing Light Cycle")
+                .addDropdown((dropdown) => {
+                    this._lightCycles.forEach((lightCycle) => dropdown.addOption(lightCycle, lightCycle));
+                    dropdown.setValue(this._currentLightCycle);
+                    dropdown.selectEl.classList.add("lightcycle-selection-dropdown");
+    
+                    dropdown.onChange((value) => {
+                        this._currentLightCycle = value;
+                        console.log(`Selected Existing Light Cycle: ${value}`);
+                    });
+                });
+        } else {
+            new Setting(inputContainer)
+                .setName("New Light Cycle")
+                .addText((text) => {
+                    text.setPlaceholder("Enter light cycle...")
+                        .setValue(this._currentLightCycle ? this._currentLightCycle : this._defaultLightCycle)
+                        .onChange((value) => {
+                            this._currentLightCycle = value;
+                            console.log(`New Light Cycle: ${value}`);
+                        });
+                    text.inputEl.classList.add("lightcycle-selection-textbox");
+                });
+        }
+    }
+
     protected onBack(): void {
         console.log("Back button clicked - cancellation.");
         this.triggerCancelled();
@@ -522,8 +623,8 @@ class NewSiteWizardPage extends WizardPage {
 
     protected async onNext(): Promise<void> {
         // Validation logic
-        if (!this._currentProjectName || !this._currentLocationName) {
-            new CustomNotice("Please provide Project and Location!", "warning-notice");
+        if (!this._currentProjectName || !this._currentLocationName || !this._currentLightCycle) {
+            new CustomNotice("Please provide Project, Location and Light Cycle!", "warning-notice");
             return;
         }
 
@@ -540,12 +641,13 @@ class NewSiteWizardPage extends WizardPage {
         }
 
         console.log("Proceeding to the next step...");
-        console.log(`Project: ${this._currentProjectName}, Location: ${this._currentLocationName}, Depth: ${currentDepth}`);
+        console.log(`Project: ${this._currentProjectName}, Location: ${this._currentLocationName}, Depth: ${currentDepth}, Light Cycle: ${this._currentLightCycle}`);
 
         this.triggerSuccess({
             project: this._currentProjectName,
             location: this._currentLocationName,
             depth: currentDepth,
+            lightCycle: this._currentLightCycle,
         });
     }
 }

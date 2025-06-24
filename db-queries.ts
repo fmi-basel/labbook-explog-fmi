@@ -497,8 +497,38 @@ export async function queryLocations(config: DBConfig): Promise<string[]> {
   }
 }
 
-export async function addNewSite(config: DBConfig, siteID: number, animalID: string, project: string, location: string, depth: number | null): Promise<number> {
-  const query = "INSERT INTO Sites (SiteID, AnimalID, Project, Location, Depth) VALUES (@SiteID, @AnimalID, @Project, @Location, @Depth);";
-  const params = { SiteID: siteID, AnimalID: animalID, Project: project, Location: location, Depth: depth };
+export async function queryLightCycles(config: DBConfig): Promise<string[]> {
+  if (config.dbType == "mssql") {
+    return withMSSqlDatabase(config, async (pool) => {
+      const result = await pool.request()
+          .query(`
+              SELECT DISTINCT LightCycle FROM Sites
+              WHERE DataDeleted = 0
+              ORDER BY LightCycle ASC;
+          `);
+
+      const lightCycles = result.recordset.map((row) => row.LightCycle as string);
+      return lightCycles;
+    });
+  }
+  else {
+    const query = `
+        SELECT DISTINCT lightcycle FROM Sites
+        WHERE DataDeleted = false
+        ORDER BY LightCycle ASC;
+    `;
+
+    return withPostgresDatabase(config, async (pool) => {
+      const result = await pool.query(query);
+
+      const lightCycles = result.rows.map((row) => row.lightcycle as string);
+      return lightCycles;
+    });
+  }
+}
+
+export async function addNewSite(config: DBConfig, siteID: number, animalID: string, project: string, location: string, depth: number | null, lightCycle: string): Promise<number> {
+  const query = "INSERT INTO Sites (SiteID, AnimalID, Project, Location, Depth, LightCycle) VALUES (@SiteID, @AnimalID, @Project, @Location, @Depth, @LightCycle);";
+  const params = { SiteID: siteID, AnimalID: animalID, Project: project, Location: location, Depth: depth, LightCycle: lightCycle };
   return await executeNonQuery(config, query, params); // mssql vs postgres handled in executeNonQuery
 }
