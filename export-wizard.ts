@@ -526,7 +526,7 @@ class NewSiteWizardPage extends WizardPage {
     private renderDepthSection() {
         this._depthContainer.empty(); // Clear previous content
         this._depthContainer.createEl("h4", { text: "Depth" });
-        
+
         let inputContainer = this._depthContainer.querySelector(".depth-inputs") as HTMLElement;
         if (!inputContainer) {
             inputContainer = this._depthContainer.createDiv({ cls: "depth-inputs" });
@@ -534,8 +534,8 @@ class NewSiteWizardPage extends WizardPage {
         inputContainer.empty(); // Clear previous inputs
 
         new Setting(inputContainer)
-                .setName("Depth")
-                .setDesc("optional")
+                .setName("Optional value")
+                //.setDesc("optional")
                 .addText((text) => {
                     text.setPlaceholder("Enter depth...")
                         .setValue(this._currentDepthString)

@@ -42,7 +42,7 @@ const DEFAULT_SETTINGS: LabBookExpLogSettings = {
 	dbTrustServerCertificate: true,
 	inputDateFormat: "YYYY-MM-DD",
 	inputTimeFormat: "HH:mm",
-	defaultLightCycle: "8:00 – 20:00 CET"
+	defaultLightCycle: "20:00 – 8:00 CEST lights on"
 }
 
 function catchLabBookExpLogPluginErrors(target: any, propertyKey: string, descriptor: PropertyDescriptor): void {
@@ -838,7 +838,7 @@ class LabBookSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName('Default Light Cycle')
 			.addText(text => text
-				.setPlaceholder('8:00 – 20:00 CET')
+				//.setPlaceholder('8:00 – 20:00 CET')
 				.setValue(this._plugin._settings.defaultLightCycle)
 				.onChange(async (value) => {
 				this._plugin._settings.defaultLightCycle = value;

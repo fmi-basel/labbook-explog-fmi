@@ -36,12 +36,13 @@
 }
 
 .export-wizard-modal {
-  width: 450px;
-  height: 750px;
+  width: 525px;
+  height: 650px;
   display: flex;
   flex-direction: column; /* Ensure vertical stacking */
   box-sizing: border-box;
   overflow: hidden; /* Prevent unnecessary scrollbars */
+  overflow-y: scroll;
 }
 
 .export-wizard-modal.finish-wizard-page {
@@ -65,6 +66,7 @@
 
 .wizard-page-container h4 {
   margin-top: 0px;
+  margin-bottom: 7px;
 }
 
 /* Content container with scrollable content */
@@ -77,7 +79,7 @@
 /* Buttons container */
 .wizard-buttons-container {
   position: relative; /* Allow positioning of child elements */
-  padding: 5px 10px;
+  padding: 15px 10px 5px 10px;
   height: 50px; /* Fixed height for the button bar */
 }
 
@@ -115,7 +117,7 @@
 .project-type-container,
 .location-type-container,
 .lightcycle-type-container {
-  margin-bottom: 10px; /* Spacing below the dropdown */
+  margin-bottom: 7px; /* Spacing below the dropdown */
 }
 
 .project-type-dropdown,
@@ -145,10 +147,17 @@
 .project-selection-textbox,
 .location-selection-dropdown,
 .location-selection-textbox,
-.lightcycle-selection-dropdown,
-.lightcycle-selection-textbox,
 .depth-selection-textbox {
-  width: 150px !important;
+  width: 200px !important;
+}
+
+.lightcycle-selection-dropdown,
+.lightcycle-selection-textbox {
+  width: 200px !important;
+}
+
+.depth-inputs .setting-item-name {
+  font-style: italic;
 }
 
 /* Success Notice */
