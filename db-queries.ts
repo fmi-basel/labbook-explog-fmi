@@ -503,7 +503,7 @@ export async function queryLightCycles(config: DBConfig): Promise<string[]> {
       const result = await pool.request()
           .query(`
               SELECT DISTINCT LightCycle FROM Sites
-              WHERE DataDeleted = 0
+              WHERE DataDeleted = 0 AND LightCycle IS NOT NULL AND LightCycle <> ''
               ORDER BY LightCycle ASC;
           `);
 
@@ -514,7 +514,7 @@ export async function queryLightCycles(config: DBConfig): Promise<string[]> {
   else {
     const query = `
         SELECT DISTINCT lightcycle FROM Sites
-        WHERE DataDeleted = false
+        WHERE DataDeleted = false AND LightCycle IS NOT NULL AND LightCycle <> ''
         ORDER BY LightCycle ASC;
     `;
 

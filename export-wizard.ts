@@ -197,6 +197,13 @@ export class ExportWizardModal extends Modal {
         }
         if (this._lightCycles.length == 0) {
             this._lightCycles = await dbQueries.queryLightCycles(this._dbConfig);
+            if (this._lightCycles.length == 0 || !this._lightCycles.includes(this._defaultLightCycle)) {
+                // Prepend this._defaultLightCycle
+                this._lightCycles = [
+                this._defaultLightCycle,
+                ...this._lightCycles,
+                ];
+            }
         }
 
         // Get the current site (based on _missingSiteIDsIndex)
@@ -341,9 +348,9 @@ class NewSiteWizardPage extends WizardPage {
         this._lightCycles = existingLightCycles;
         this._currentSiteID = currentSiteID;
         this._defaultLightCycle = defaultLightCycle;
-        if (this._defaultLightCycle) {
+        /*if (this._defaultLightCycle) {
             this._currentLightCycle = this._defaultLightCycle; // Always initiate with default value
-        }
+        }*/
 
         this.renderPageContent(currentSitesIndex, totalSitesCount);
     }
@@ -385,7 +392,7 @@ class NewSiteWizardPage extends WizardPage {
     // Render Project Section
     private renderProjectSection() {
         this._projectContainer.empty(); // Clear previous content
-        this._projectContainer.createEl("h4", { text: "Project" });
+        this._projectContainer.createEl("h4", { text: "Project *" });
 
         // Create a container for the dropdown
         const dropdownContainer = this._projectContainer.createDiv({ cls: "project-type-container" });
@@ -455,7 +462,7 @@ class NewSiteWizardPage extends WizardPage {
     // Render Location Section
     private renderLocationSection() {
         this._locationContainer.empty(); // Clear previous content
-        this._locationContainer.createEl("h4", { text: "Location" });
+        this._locationContainer.createEl("h4", { text: "Location *" });
 
         // Create a container for the dropdown
         const dropdownContainer = this._locationContainer.createDiv({ cls: "location-type-container" });
@@ -549,7 +556,7 @@ class NewSiteWizardPage extends WizardPage {
     // Render LightCycle Section
     private renderLightCycleSection() {
         this._lightCycleContainer.empty(); // Clear previous content
-        this._lightCycleContainer.createEl("h4", { text: "Light Cycle" });
+        this._lightCycleContainer.createEl("h4", { text: "Light Cycle *" });
 
         // Create a container for the dropdown
         const dropdownContainer = this._lightCycleContainer.createDiv({ cls: "lightcycle-type-container" });
@@ -602,11 +609,12 @@ class NewSiteWizardPage extends WizardPage {
                     });
                 });
         } else {
+            this._currentLightCycle = ""; // always reset when selecting new
             new Setting(inputContainer)
                 .setName("New Light Cycle")
                 .addText((text) => {
                     text.setPlaceholder("Enter light cycle...")
-                        .setValue(this._currentLightCycle ? this._currentLightCycle : this._defaultLightCycle)
+                        .setValue(this._currentLightCycle)
                         .onChange((value) => {
                             this._currentLightCycle = value;
                             console.log(`New Light Cycle: ${value}`);
