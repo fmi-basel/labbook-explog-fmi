@@ -29,6 +29,7 @@ const nodePrefixedImports = {
   };
   */
 
+  /*
   async function fixProcessSlash(filePath) {
 	try {
 	  let contents = await fs.readFile(filePath, "utf8");
@@ -44,6 +45,33 @@ const nodePrefixedImports = {
 	  console.error(`Error applying fix: ${err.message}`);
 	}
   }
+	*/
+
+async function fixRequireTrailingSlash(filePath, moduleNames) {
+  try {
+    let contents = await fs.readFile(filePath, "utf8");
+    let changed = false;
+
+    for (const name of moduleNames) {
+      const re = new RegExp(`require\\((["'])${name}\\/\\1\\)`, "g");
+      const matches = contents.match(re);
+      const occurrences = matches ? matches.length : 0;
+
+      if (occurrences > 0) {
+        console.log(`Found ${occurrences} occurrences of require("${name}/"). Fixing...`);
+        contents = contents.replace(re, `require("${name}")`);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await fs.writeFile(filePath, contents, "utf8");
+      console.log("Fix applied successfully.");
+    }
+  } catch (err) {
+    console.error(`Error applying fix: ${err.message}`);
+  }
+}
 
 const context = await esbuild.context({
 	banner: {
@@ -98,7 +126,8 @@ const context = await esbuild.context({
 if (prod) {
 	// Production mode: build once and apply the fix
 	await context.rebuild();
-	await fixProcessSlash("./main.js");
+	//await fixProcessSlash("./main.js");
+	await fixRequireTrailingSlash("./main.js", ["process", "string_decoder"]);
 	process.exit(0);
   } else {
 	// Development mode: watch for changes
@@ -108,6 +137,7 @@ if (prod) {
 	// Watch for changes to main.js and apply the fix dynamically
 	chokidar.watch("./main.js").on("change", async () => {
 	  console.log("Detected change in main.js. Applying fix...");
-	  await fixProcessSlash("./main.js");
+	  //await fixProcessSlash("./main.js");
+	  await fixRequireTrailingSlash("./main.js", ["process", "string_decoder"]);
 	});
   }
