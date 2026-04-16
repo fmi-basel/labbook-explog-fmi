@@ -1,5 +1,43 @@
 # LabBook ExpLog Plugin
 
+## Version 2.1.3 – Security Update and Build Stability
+
+### Summary
+Version **2.1.3** includes a **security update** and retains the required build fix for compatibility with newer **Obsidian / Electron** runtimes.
+
+Without the build fix, the plugin may fail to load at runtime with errors such as:
+
+    Cannot find module 'string_decoder/'
+
+Additionally, this release resolves a **transitive dependency vulnerability (CVE-2026-4800)** in Lodash.
+
+---
+
+## Security Fix – CVE-2026-4800 (Lodash)
+
+### Issue
+A vulnerability was identified in **Lodash (`_.template`)**, allowing potential code injection via crafted `imports` key names.
+
+The plugin itself does **not directly use Lodash**, but a vulnerable version was included via:
+
+    archiver → archiver-utils → lodash@4.17.21
+
+### Fix Applied in 2.1.3
+
+The dependency is now forced to a patched version:
+
+    lodash@4.18.1
+
+This is enforced via `package.json`:
+
+```json
+"overrides": {
+  "lodash": "^4.18.1"
+}
+```
+
+---
+
 ## Version 2.1.2 – Build and Compatibility Update
 
 ### Summary
@@ -68,7 +106,7 @@ The plugin version used by Obsidian is defined in **`manifest.json`**.
 
 For this release:
 
-    "version": "2.1.2"
+    "version": "2.1.3"
 
 The version in `package.json` is not used by Obsidian at runtime.
 
